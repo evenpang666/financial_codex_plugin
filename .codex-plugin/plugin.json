@@ -1,0 +1,9 @@
+{
+  "name": "financial-agent",
+  "version": "1.0.0",
+  "description": "知衡：A股、港股、美股研究、持仓复核、双时点日报、量化回测和模型训练。本地日报：http://127.0.0.1:3205/reports（默认端口；如端口冲突，以启动输出为准）。",
+  "skills": "./skills/",
+  "mcpServers": "./.mcp.json",
+  "requires_local_executor": true,
+  "interface": {"displayName": "知衡 Financial Agent", "shortDescription": "三市场金融研究；本地日报 http://127.0.0.1:3205/reports"}
+}

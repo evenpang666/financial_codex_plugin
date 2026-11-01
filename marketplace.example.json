@@ -1,0 +1,20 @@
+{
+  "name": "zhiheng-local",
+  "interface": {
+    "displayName": "知衡本地插件"
+  },
+  "plugins": [
+    {
+      "name": "financial-agent",
+      "source": {
+        "source": "local",
+        "path": "./"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

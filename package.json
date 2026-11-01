@@ -1,0 +1,26 @@
+{
+  "name": "codex-financial-agent",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "知衡 Codex 独立金融研究插件：A股、港股、美股、日报、持仓、回测与模型训练",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "scripts": {
+    "start": "node scripts/launch.mjs",
+    "dev": "node scripts/launch.mjs --no-open",
+    "stop": "node scripts/stop.mjs",
+    "mcp": "node scripts/mcp-server.mjs",
+    "setup": "node scripts/setup.mjs",
+    "check": "node scripts/check-plugin.mjs",
+    "test": "node --test tests/codex-*.test.mjs tests/web-server.test.mjs tests/web-network.test.mjs tests/web-portfolio.test.mjs tests/test_report_visuals.cjs tests/test_portfolio_tool.mjs",
+    "test:python": "node scripts/run-python-tests.mjs",
+    "pack:plugin": "node scripts/package-plugin.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "ajv": "^8.17.1"
+  }
+}
