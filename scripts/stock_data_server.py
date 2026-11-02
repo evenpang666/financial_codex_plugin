@@ -14,12 +14,13 @@ import logging
 import sys
 import us_market as us
 from concurrent.futures import ThreadPoolExecutor
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import RLock
 from uuid import uuid4
 from urllib.parse import parse_qs, urlparse
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -41,7 +42,7 @@ PORTFOLIO_LOCK = RLock()
 EVENT_ARCHIVE_FILE = PROJECT_ROOT / "data" / "market-events.json"
 REPORT_SNAPSHOT_DIR = PROJECT_ROOT / "data" / "report-snapshots"
 REFLECTION_FILE = PROJECT_ROOT / "data" / "research-reflections.json"
-REPORT_SESSIONS = {"morning", "afternoon"}
+REPORT_SESSIONS = {"morning", "afternoon", "manual"}
 
 
 def normalize_report_session(value: str = "morning") -> str:
@@ -49,7 +50,7 @@ def normalize_report_session(value: str = "morning") -> str:
     aliases = {"am": "morning", "preopen": "morning", "日报1": "morning", "pm": "afternoon", "preclose": "afternoon", "日报2": "afternoon"}
     session = aliases.get(session, session)
     if session not in REPORT_SESSIONS:
-        raise ValueError("session 必须是 morning（日报1）或 afternoon（日报2）。")
+        raise ValueError("session 必须是 morning（上午日报）、afternoon（下午日报）或 manual（手动报告）。")
     return session
 
 
@@ -67,7 +68,7 @@ def load_json_object(path: Path, default=None):
 
 
 def save_report_snapshot(payload: dict):
-    target = snapshot_path(payload.get("as_of", str(date.today())), payload.get("market", "a"), payload.get("session", "morning"))
+    target = (REPORT_SNAPSHOT_DIR / f"{payload['report_id']}.json") if payload.get("session") == "manual" else snapshot_path(payload.get("as_of", str(date.today())), payload.get("market", "a"), payload.get("session", "morning"))
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps(payload, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
     return target
@@ -1653,10 +1654,13 @@ def daily_digest_markdown(panorama: dict, candidates: dict, weekly: dict, warnin
 def daily_report_response(candidate_limit: int = 5, market: str = "a", session: str = "morning"):
     market = normalize_market(market)
     session = normalize_report_session(session)
+    local_time = datetime.now(ZoneInfo("America/New_York" if market == "us" else "Asia/Shanghai"))
+    report_day = str(local_time.date())
+    manual_id = f"{local_time:%Y-%m-%d}-{market}-manual-{local_time:%H%M%S}" if session == "manual" else None
     calendar = trading_day_response(market=market)
     if not calendar["is_trading_day"]:
         return {
-            "as_of": str((us.today() if market == 'us' else date.today())), "market": market, "session": session, "is_trading_day": False, "has_holdings": False,
+            "as_of": report_day, "market": market, "session": session, "is_trading_day": False, "has_holdings": False,
             "empty_reason": "non_trading_day", "markdown": "", "source": calendar["source"],
             "note": "今日不是交易日，不生成日报。",
         }
@@ -1695,12 +1699,12 @@ def daily_report_response(candidate_limit: int = 5, market: str = "a", session: 
     except Exception as exc:
         horizons = {"horizons": {key: [] for key in ("long", "short", "ultra_short")}, "pool_size": 0}
         report_warnings.append(f"分周期分析不可用：{exc}")
-    report_number = "日报1" if session == "morning" else "日报2"
-    timing = "09:20开始汇总，目标于09:30开盘前送达" if session == "morning" else "14:30开始汇总，收盘前进行盘中复盘"
-    if market == "us": timing = "纽约时间09:20（盘前，行情可能为上个交易日）" if session == "morning" else "纽约时间15:30（提前收市日按实际收市状态解释）"
-    phase_title = "开盘前" if session == "morning" else "收盘前"
+    report_number = "手动报告" if session == "manual" else "日报1" if session == "morning" else "日报2"
+    timing = f"{local_time:%H:%M:%S}手动生成，{'纽约' if market == 'us' else '北京'}时间" if session == "manual" else "09:20开始汇总，目标于09:30开盘前送达" if session == "morning" else "14:30开始汇总，收盘前进行盘中复盘"
+    if market == "us" and session != "manual": timing = "纽约时间09:20（盘前，行情可能为上个交易日）" if session == "morning" else "纽约时间15:30（提前收市日按实际收市状态解释）"
+    phase_title = "即时" if session == "manual" else "开盘前" if session == "morning" else "收盘前"
     lines = [
-        f"# {market_label(market)}{report_number}｜{phase_title}研究简报", "", f"数据日期：{(us.today() if market == 'us' else date.today())}（{timing}）", "",
+        f"# {market_label(market)}{report_number}｜{phase_title}研究简报", "", f"数据日期：{report_day}（{timing}）", "",
         *daily_digest_markdown(panorama, candidates, weekly, report_warnings),
         "## 市场全景", "",
         f"- 市场状态：{panorama.get('market_state', {}).get('summary', '数据不足')}",
@@ -1754,15 +1758,18 @@ def daily_report_response(candidate_limit: int = 5, market: str = "a", session: 
         for item in historical[:5]:
             lines.append(f"- {item.get('date')} {item.get('symbol')}：{item.get('reflection')}（一致性：{item.get('alignment')}）")
     payload = {
-        "as_of": str((us.today() if market == 'us' else date.today())), "market": market, "session": session, "report_number": report_number,
+        "as_of": report_day, "market": market, "session": session, "report_number": report_number,
         "is_trading_day": True, "has_holdings": False, "market_panorama": panorama, "portfolio": [],
         "global_markets": global_markets, "sectors": sectors, "horizon_recommendations": horizons,
         "weekly_events": weekly, "monthly_events": monthly, "candidates": candidates,
         "historical_reflections": historical, "warnings": report_warnings,
         "note": "持仓分析仅在日报网页点击持仓分析按钮后按需生成，不写入定时日报。",
     }
+    if manual_id:
+        payload["report_id"] = manual_id
+        payload["generated_at"] = local_time.isoformat(timespec="seconds")
     if session == "afternoon":
-        morning = load_json_object(snapshot_path(str((us.today() if market == 'us' else date.today())), market, "morning"), {})
+        morning = load_json_object(snapshot_path(report_day, market, "morning"), {})
         review = build_intraday_review(morning, payload, market)
         payload["intraday_review"] = review
         lines.extend(intraday_review_markdown(review))

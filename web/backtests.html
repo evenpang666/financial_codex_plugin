@@ -34,18 +34,19 @@
         <h2 id="runTitle">验证你的策略</h2><p id="runDescription">选择经典策略或已训练模型，查看净值、回撤与交易明细。缺少历史数据时自动下载并验收。</p>
         <form id="taskForm" data-kind="backtest" class="task-fields">
           <input type="hidden" name="action" value="backtest">
-          <label>市场<select name="market"><option value="a">A股 · 盘中策略</option><option value="us">美股 · 日线策略</option></select></label>
-          <label id="usSymbolsField" hidden>美股股票池<input name="symbols" placeholder="AAPL, MSFT, NVDA" maxlength="800"></label>
+          <label>市场<select name="market"><option value="a">A股</option><option value="hk">港股</option><option value="us">美股</option></select></label>
+          <label>K线周期<select name="timeframe"><option value="daily" selected>日线</option><option value="weekly">周线</option><option value="monthly">月线</option></select></label>
+          <label id="poolField">A股股票池<select name="pool"><option value="custom">自定股票池</option><option value="csi300">沪深300</option><option value="csi500">中证500</option></select></label>
+          <label id="symbolsField">自定股票池（1–50只）<input name="symbols" placeholder="600519, 000858" maxlength="800" required></label>
           <label><span id="strategyLabel">策略 / 已训练模型</span><select name="strategy" required><option value="">正在加载…</option></select></label>
           <label><span id="startLabel">回测开始</span><input type="date" name="start" required></label>
           <label><span id="endLabel">回测结束</span><input type="date" name="end" required></label>
-          <label><span id="slotLabel">信号时点</span><select name="slot"><option>09:35</option><option>10:30</option><option>11:30</option><option>13:30</option><option selected>14:00</option><option>14:30</option><option>14:50</option></select></label>
           <details class="parameter-editor"><summary id="parameterTitle">策略超参数</summary><div id="taskParameters" class="task-fields"></div></details>
           <button class="primary" type="submit" disabled>运行回测</button><button id="cancelTask" type="button" hidden>取消任务</button>
         </form>
       </div>
       <pre id="taskLog" class="task-log" role="status" aria-live="polite"></pre>
-      <section id="trainedModels" class="trained-models" aria-labelledby="modelsTitle" hidden><div class="models-heading"><h3 id="modelsTitle">我的因子模型</h3><span id="modelsCount"></span></div><p>每次训练保存一个独立版本。选择模型后，可在训练区间之后运行回测。</p><div id="modelList" class="model-list"></div></section>
+      <section id="trainedModels" class="trained-models" aria-labelledby="modelsTitle"><div class="models-heading"><h3 id="modelsTitle">我的因子模型</h3><span id="modelsCount"></span></div><p>按上方市场和 K线周期显示模型。可查看版本详情、用于回测或删除；历史回测归档会保留。</p><p id="modelManageStatus" class="model-manage-status" role="status" aria-live="polite"></p><div id="modelList" class="model-list"></div></section>
     </section>
     <div class="report-layout">
     <aside class="report-index" aria-label="回测索引列">
@@ -60,7 +61,7 @@
     </aside>
     <div class="report-content">
     <section id="backtestResults" class="ranking-shell" aria-labelledby="backtestTitle">
-      <div class="ranking-heading"><div><p class="eyebrow">PERFORMANCE & HISTORY</p><h2 id="backtestTitle">策略表现与数据图</h2><p id="backtestMeta">正在读取策略回测结果…</p></div><span class="ranking-badge">A股 / 美股 · 模拟研究</span></div>
+      <div class="ranking-heading"><div><p class="eyebrow">PERFORMANCE & HISTORY</p><h2 id="backtestTitle">策略表现与数据图</h2><p id="backtestMeta">正在读取策略回测结果…</p></div><span class="ranking-badge">A股 / 港股 / 美股 · 模拟研究</span></div>
       <div id="backtestContent" class="backtest-content" aria-live="polite"></div>
     </section>
     </div>

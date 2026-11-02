@@ -30,6 +30,9 @@ class PortfolioImportTests(unittest.TestCase):
         self.assertEqual(rows["000858"]["shares"],30)
         self.assertEqual(rows["00700"]["market"],"hk")
         self.assertEqual(server.import_portfolio(incoming)["holdings"],result["holdings"])
+        partial = server.import_portfolio({"holdings":[{"market":"a","symbol":"600519","shares":125}]})
+        self.assertEqual((partial["added"], partial["updated"]), (0, 1))
+        self.assertEqual({row["symbol"]: row["shares"] for row in partial["holdings"]}, {"600519":125.0,"000858":30.0,"00700":200.0})
 
     def test_invalid_record_aborts_whole_batch_without_touching_cache(self):
         original = self.path.read_bytes()

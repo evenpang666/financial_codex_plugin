@@ -32,7 +32,7 @@ description: "知衡金融研究：portfolio-daily-review。使用 financial 插
 
 ## 双时点日报与反馈
 
-用户要求日报时，先用 `get_trading_day` 核验交易日，再调用 `get_daily_research_report(session="morning" 或 "afternoon")`。日报2只用两次快照价格、当日涨跌、市场风险分变化和可核验披露判断一致性，不凭叙事补写原因。复盘反馈需保留样本量和有限校准，不把一次相符当作收益或因果证明；它不自动调整真实持仓。
+用户请求手动归档报告时，先用 `get_trading_day` 核验交易日，再调用 `start_financial_job(kind="daily", market=...)`，不要求选择上午或下午。用户明确要查看某个时段的结构化证据时，才调用 `get_daily_research_report(session="morning" 或 "afternoon")`。定时下午日报只用两次定时快照价格、当日涨跌、市场风险分变化和可核验披露判断一致性，不凭叙事补写原因；手动报告不参与该复盘。复盘反馈需保留样本量和有限校准，不把一次相符当作收益或因果证明；它不自动调整真实持仓。
 
 最终说明：买卖倾向是证据方向分；配置权重是带现金与上限的研究预算方案。两者都可能随新数据变化，不保证收益，也不执行交易。
 

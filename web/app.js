@@ -28,7 +28,28 @@ let portfolioStrategyChosen = false
 let portfolioAnalyzing = false
 let portfolioStarting = false
 const portfolioResults = new Map()
-document.addEventListener('portfolio-saved', () => { portfolioResults.clear(); portfolioContent.replaceChildren(); document.querySelector('#portfolioMeta').textContent = '持仓已更新，点击“分析我的持仓”查看新结果。' })
+let portfolioRevision = 0
+document.addEventListener('portfolio-saved', () => { portfolioRevision++; portfolioResults.clear(); portfolioContent.replaceChildren(); document.querySelector('#portfolioMeta').textContent = '持仓已更新，点击“分析我的持仓”查看新结果。' })
+function portfolioResultKey(market, strategy, parameters) {
+  return JSON.stringify([market, strategy, Object.entries(parameters).sort(([a], [b]) => a.localeCompare(b))])
+}
+function selectedPortfolioResultKey(market = document.querySelector('#portfolioMarket').value) {
+  if (!portfolioStrategy.value) return null
+  const parameters = {}
+  for (const input of document.querySelectorAll('#portfolioParameters input[data-parameter]')) {
+    if (!input.checkValidity()) return null
+    parameters[input.dataset.parameter] = Number(input.value)
+  }
+  return portfolioResultKey(market, portfolioStrategy.value, parameters)
+}
+function restorePortfolioResult(market = document.querySelector('#portfolioMarket').value) {
+  const saved = portfolioResults.get(selectedPortfolioResultKey(market))
+  if (saved) { renderPortfolioResult(saved); return true }
+  portfolioContent.replaceChildren()
+  document.querySelector('#portfolioMeta').textContent = portfolioStrategy.disabled && portfolioKind.value === 'model'
+    ? '没有已训练模型，请先在回测页训练模型。' : '当前选择暂无分析记录，点击“分析我的持仓”生成结果。'
+  return false
+}
 const researchUpdateButton = document.querySelector('#researchUpdateButton')
 let publishedRanking = null
 let rankingPublicationId = ''
@@ -173,11 +194,8 @@ function showInsights(payload) {
   renderBars(sectorChart, sectors.boards || [], row => `${row.theme} · ${row.name}`)
   renderHorizon()
   if (changedMarket) {
-    portfolioContent.replaceChildren()
-    const saved = portfolioResults.get(currentMarket)
-    if (saved && saved.selection === portfolioStrategy.value) renderPortfolioResult(saved.payload)
-    else document.querySelector('#portfolioMeta').textContent = portfolioKind.value === 'model' && !portfolioStrategy.value
-      ? '没有已训练模型，请先在回测页训练模型。' : '默认不读取持仓；点击后按当前公开数据分析。'
+    if (currentMarket === document.querySelector('#portfolioMarket').value) restorePortfolioResult(currentMarket)
+    else portfolioContent.replaceChildren()
   }
 }
 
@@ -219,7 +237,7 @@ function renderExecutionParameters(prefix, select, payload) {
     input.value = draft[key] ?? spec.default
     input.dataset.parameter = key
     input.required = true
-    input.addEventListener('input', () => { draft[key] = input.value })
+    input.addEventListener('input', () => { draft[key] = input.value; if (prefix === 'portfolio') restorePortfolioResult() })
     label.append(input); container.append(label)
   }
   const reset = textNode('button', '恢复推荐默认值')
@@ -227,6 +245,7 @@ function renderExecutionParameters(prefix, select, payload) {
   reset.addEventListener('click', () => {
     executionParameterDrafts.set(draftKey, Object.fromEntries(Object.entries(item.parameter_schema).map(([key, spec]) => [key, spec.default])))
     renderExecutionParameters(prefix, select, payload)
+    if (prefix === 'portfolio') restorePortfolioResult()
   })
   container.append(reset)
   if (item.training_parameters && Object.keys(item.training_parameters).length) {
@@ -266,7 +285,7 @@ async function loadPortfolioStrategies() {
     if (!portfolioStrategyChosen) portfolioKind.value = payload.selected_kind || (selected?.includes('@') ? 'model' : 'fixed')
     fillExecutionSelect(portfolioKind, portfolioStrategy, payload, selected)
     document.querySelector('#portfolioButton').disabled = portfolioStarting || portfolioAnalyzing || portfolioStrategy.disabled
-    if (portfolioStrategy.disabled) document.querySelector('#portfolioMeta').textContent = '没有已训练模型，请先在回测页训练模型。'
+    if (!portfolioAnalyzing) restorePortfolioResult()
   } catch (error) {
     portfolioStrategy.replaceChildren()
     portfolioStrategy.disabled = true
@@ -277,14 +296,12 @@ portfolioKind.addEventListener('change', () => {
   portfolioStrategyChosen = true
   if (portfolioOptions) fillExecutionSelect(portfolioKind, portfolioStrategy, portfolioOptions)
   document.querySelector('#portfolioButton').disabled = !portfolioStrategy.value
-  portfolioContent.replaceChildren()
-  document.querySelector('#portfolioMeta').textContent = portfolioStrategy.value ? '请选择策略或 checkpoint 后分析持仓。' : '没有已训练模型，请先在回测页训练模型。'
+  restorePortfolioResult()
 })
 portfolioStrategy.addEventListener('change', () => {
   portfolioStrategyChosen = true
   renderExecutionParameters("portfolio", portfolioStrategy, portfolioOptions)
-  portfolioContent.replaceChildren()
-  document.querySelector('#portfolioMeta').textContent = '策略已切换，请重新点击分析；本页选择不会修改保存配置。'
+  restorePortfolioResult()
 })
 
 function renderPositionSummary(payload) {
@@ -356,6 +373,8 @@ document.querySelector('#portfolioButton').addEventListener('click', async event
     if (!portfolioStrategy.value || requestedMarket !== document.querySelector('#portfolioMarket').value) return
     const selectedStrategy = portfolioStrategy.value
     const parameters = executionParameters('portfolio')
+    const resultKey = portfolioResultKey(requestedMarket, selectedStrategy, parameters)
+    const requestedRevision = portfolioRevision
     portfolioStrategy.disabled = true; portfolioKind.disabled = true
     portfolioStarting = false; portfolioAnalyzing = true
     document.querySelector('#portfolioMeta').textContent = '正在分析财报、估值、技术面与所选策略，生成三组研究配置…'
@@ -363,8 +382,10 @@ document.querySelector('#portfolioButton').addEventListener('click', async event
     const response = await fetch('/api/portfolio-analysis', {method: 'POST', headers: {'X-Report-Market': requestedMarket, 'X-Portfolio-Strategy': selectedStrategy, 'X-Strategy-Parameters': JSON.stringify(parameters)}})
     const payload = await response.json()
     if (!response.ok) throw new Error(payload.error || `HTTP ${response.status}`)
-    portfolioResults.set(requestedMarket, {selection: selectedStrategy, payload})
-    if (requestedMarket === document.querySelector('#portfolioMarket').value) renderPortfolioResult(payload)
+    if (requestedRevision === portfolioRevision) {
+      portfolioResults.set(resultKey, payload)
+      if (requestedMarket === document.querySelector('#portfolioMarket').value && resultKey === selectedPortfolioResultKey()) renderPortfolioResult(payload)
+    }
   } catch (error) {
     if (requestedMarket === document.querySelector('#portfolioMarket').value) document.querySelector('#portfolioMeta').textContent = `持仓分析失败：${error.message}`
   } finally {
@@ -510,6 +531,7 @@ researchUpdateButton.addEventListener('click', async () => {
     rankingStrategyChosen = true
   }
   document.querySelector('#researchTools').open = true
+  document.querySelector('#rankingTools').closest('details').open = true
   jumpToSection(document.querySelector('#rankingTools'))
 })
 

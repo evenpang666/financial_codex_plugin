@@ -6,7 +6,7 @@
 
 ## 使用流程
 
-1. 运行 `npm start`，在 `/reports` 阅读日报或点击“生成日报”。研究提问在首页，模型由 DSH Web 统一管理。
+1. 运行 `npm start`，在 `/reports` 阅读日报或点击“生成手动报告”。手动报告只选择市场，按市场当地时刻单独归档。
 2. 如需持仓研究，在知衡首页或 DSH Web 对话框发送持仓。例如：
 
 ```text
@@ -22,7 +22,7 @@
 5. 日报2会逐项检查日报1候选结论：买入后从上午快照跌幅不高于 -2%，或卖出后涨幅不低于 2%，记为“明显背离”；其他结果分为“相符”“待观察”或“数据不足”。独立的持仓分析不参加定时日报复盘。
 6. 原因分析只使用两次价格、当日涨跌幅、市场风险分和可得结构化事件。没有披露证据时会明确写“无法确认公司层面因果”，不会编造原因。
 7. 快照保存到 `data/report-snapshots/`，累计反思保存到 `data/research-reflections.json`。后续候选筛选和单股分析会读取最近反思，以 -10 至 +5 个百分点的有限调整校准方向分，同时保留原始分、样本数和调整值。
-8. 网页日报保存为 `data/reports/YYYY-MM-DD-a-morning.md` 与 `YYYY-MM-DD-a-afternoon.md`（港股使用 `hk`），可在同一日期下分别选择日报1和日报2。
+8. 新的定时日报保存为 `data/reports/YYYY-MM-DD-a-scheduled-morning.md` 与 `YYYY-MM-DD-a-scheduled-afternoon.md`；手动报告保存为 `YYYY-MM-DD-a-manual-HHMMSS.md`。港股使用 `hk`，美股使用 `us`，手动报告时间按对应市场当地时区显示。同一天可保留多份手动报告；旧版 `YYYY-MM-DD-a-morning.md` 等文件仍可读取，并标明触发方式未记录。
 
 ## 在网页查看日报
 

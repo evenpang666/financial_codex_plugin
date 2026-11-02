@@ -40,7 +40,7 @@ codex plugin add financial-agent@zhiheng-local
 | 个股搜索、行情、日线、技术指标、估值、财报、公告、同行、综合分析 | 原21个研究工具全部保留；`/` |
 | 新闻、市场全景、样本宽度、候选排序、长短期研究 | `get_market_*`、`get_candidate_ranking`、`analyze_stock` |
 | 持仓读取、替换、文本识别、预览、编辑、删除、三方案复核 | `get_saved_portfolio` / `set_portfolio` / `update_portfolio_holding` / `delete_portfolio_holding` / `get_portfolio_position_review`；`/reports` |
-| 日报1/日报2、快照、盘中对照反思、归档与实时刷新 | `get_daily_research_report`；`start_financial_job(kind=daily)`另加Codex复核和网页归档 |
+| 定时上午/下午日报、独立手动报告、快照、盘中对照反思、归档与实时刷新 | `get_daily_research_report` 获取时段证据；`start_financial_job(kind=daily)`按当前时刻生成手动报告并归档 |
 | 调度 | `get_report_schedule` / `set_report_schedule`；持续运行工作台 |
 | 8种经典策略、2种模型、超参数、checkpoint、样本外回测、交易明细和净值图 | `get_strategy_checkpoints` / `start_financial_job`；`/backtests` |
 | 原A股全市场盘中策略部署、历史数据准备、质量审计、因子周训练 | 日报策略工具；`scripts/intraday_ranking.py`、`factor_data_prep.py`、`factor_scheduler.py` |
@@ -64,7 +64,7 @@ npm start
 
 这是 SEC 要求的访问者标识，不是API Key。未配置或限流时公告工具返回可解释错误。A股公告仍使用巨潮；原有港股HKEX公告和港股量化执行未接入的边界保持明确，不伪造数据。
 
-美股日线 `qfq` / `split_dividend` 对应 Yahoo 的拆股分红调整，拒绝 `hfq`。美股经典策略使用日线；均值回归采用20日日线成交量加权均价。信号在收盘后形成，下一交易日开盘入场、收盘退出。默认单边手续费5bps、滑点5bps，可通过任务参数 `fee_bps` / `slippage_bps` 修改。训练验证按日期分隔，模型回测必须晚于验证标签截止日。
+网页策略部署、训练与回测支持 A股、港股、美股，默认日线，可选周线、月线。信号在完整K线收盘后形成，下一根K线执行；A股日线按 T+1 延后一日退出。模型 checkpoint 按市场和周期隔离，回测必须晚于训练标签截止日。新网页引擎使用固定用户股票池（1–50只）、单边手续费5bps和滑点5bps；旧盘中引擎及归档保留供历史核对。美股 `qfq` / `split_dividend` 对应 Yahoo 的拆股分红调整，拒绝 `hfq`。
 
 美股回测是**复权总回报单位模拟**，不代表当日实际美元成交价；固定用户股票池有幸存者选择偏差，未模拟盘口、融资和完整停牌成交约束。活跃/涨跌榜候选是有界样本，不能视为全美股全集。不可把跨市场币种直接相加为账户价值。
 

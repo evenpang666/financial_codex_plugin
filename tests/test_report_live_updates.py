@@ -9,15 +9,15 @@ import tempfile
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-CHROME = shutil.which('google-chrome') or shutil.which('chromium')
+CHROME = shutil.which('google-chrome') or shutil.which('chromium') or next((str(path) for path in (Path('C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'), Path('C:/Program Files/Microsoft/Edge/Application/msedge.exe')) if path.exists()), None)
 
 
 @unittest.skipUnless(CHROME and os.getenv('FINANCE_BROWSER_TESTS') == '1', 'Set FINANCE_BROWSER_TESTS=1 to run headless browser checks')
 class ReportLiveUpdateTests(unittest.TestCase):
     def test_external_deployment_and_pending_portfolio_survive_report_updates(self):
-        html = (ROOT/'web/index.html').read_text()
-        html = html.replace('<link rel="stylesheet" href="/styles.css">', '<style>'+(ROOT/'web/styles.css').read_text()+'</style>')
-        html = html.replace('<script src="/report-visuals.js" defer></script>', '<script>'+(ROOT/'web/report-visuals.js').read_text()+'</script>')
+        html = (ROOT/'web/index.html').read_text(encoding='utf-8')
+        html = html.replace('<link rel="stylesheet" href="/styles.css">', '<style>'+(ROOT/'web/styles.css').read_text(encoding='utf-8')+'</style>')
+        html = html.replace('<script src="/report-visuals.js" defer></script>', '<script>'+(ROOT/'web/report-visuals.js').read_text(encoding='utf-8')+'</script>')
         setup = r'''
 window.EventSource = class {
   constructor(){window.events=this;this.listeners={};}
@@ -39,7 +39,7 @@ window.fetch=async(url,options={})=>{
  if(url==='/api/ranking/strategies'&&window.failMenuOnce){window.failMenuOnce=false;throw Error('transient metadata failure');}
  if(url==='/api/reports')payload={reports:[window.report]};
  else if(url.startsWith('/api/reports/'))payload=window.report;
- else if(url==='/api/ranking/strategies'||url==='/api/portfolio-strategies')payload=window.menu;
+ else if(url==='/api/ranking/strategies'||url.startsWith('/api/portfolio-strategies?'))payload=window.menu;
  else if(url==='/api/ranking/update')payload=window.latestNotice;
  else if(url==='/api/ranking/active')payload=window.activeJob||{available:false};
  else if(url.startsWith('/api/ranking/latest?'))payload=window.results[new URL(url,'http://local').searchParams.get('strategy')]||{available:false};
@@ -72,6 +72,11 @@ window.fetch=async(url,options={})=>{
   check(!portfolioContent.textContent.includes('测试持仓'),'A holdings leaked into HK section');
   showReport(window.report);
   check(portfolioContent.textContent.includes('测试持仓'),'authorized A analysis was not restored');
+  portfolioStrategy.value='macd';portfolioStrategy.dispatchEvent(new Event('change'));
+  check(!portfolioContent.textContent.includes('测试持仓'),'different strategy showed the previous analysis');
+  portfolioStrategy.value='momentum';portfolioStrategy.dispatchEvent(new Event('change'));
+  check(portfolioContent.textContent.includes('测试持仓'),'switching back did not restore the cached strategy analysis');
+  check(calls.filter(call=>call.url==='/api/portfolio-analysis').length===1,'strategy switch reran portfolio analysis');
   const selection='elastic_net@test-checkpoint';
   window.results[selection]=marketResult(selection,'external-model-result');
   events.emit('ranking',{type:'ranking',scope:'full_market',id:'external-model-result',selection_id:selection,strategy_name:'Elastic Net'});await pause();
@@ -107,11 +112,11 @@ window.fetch=async(url,options={})=>{
  }catch(error){document.body.dataset.liveUpdateCheck=error.message;}
 })();
 '''
-        html=html.replace('<script src="/app.js" defer></script>','<script>'+setup+(ROOT/'web/app.js').read_text()+checks+'</script>')
+        html=html.replace('<script src="/app.js" defer></script>','<script>'+setup+(ROOT/'web/app.js').read_text(encoding='utf-8')+checks+'</script>')
         for width, height in ((1440,900),(390,844)):
             with self.subTest(width=width), tempfile.TemporaryDirectory(prefix='akagent-live-update-') as folder:
-                fixture=Path(folder)/'fixture.html';fixture.write_text(html)
-                result=subprocess.run([CHROME,'--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',f'--user-data-dir={folder}/profile','--virtual-time-budget=5000',f'--window-size={width},{height}','--dump-dom',fixture.as_uri()],capture_output=True,text=True,timeout=30)
+                fixture=Path(folder)/'fixture.html';fixture.write_text(html, encoding='utf-8')
+                result=subprocess.run([CHROME,'--headless','--no-sandbox','--disable-gpu','--disable-dev-shm-usage',f'--user-data-dir={folder}/profile','--virtual-time-budget=5000',f'--window-size={width},{height}','--dump-dom',fixture.as_uri()],capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=30)
                 marker=re.search(r'data-live-update-check="([^"]+)"',result.stdout)
                 self.assertIsNotNone(marker,result.stderr[-1000:])
                 self.assertEqual(marker.group(1),'passed')

@@ -148,6 +148,7 @@
   }
   function renderReview(review, session) {
     const target = document.querySelector('#reviewVisual')
+    if (session === 'manual') return empty(target, '手动报告不参与定时上午／下午日报的盘中复盘。')
     if (session !== 'afternoon') return empty(target, '上午日报提供研究基线；下午日报生成后展示两次快照的对比。')
     if (review?.status !== 'completed') return empty(target, review?.note || '本期未取得复盘快照。')
     if (!review.comparisons?.length) return empty(target, '上午候选池为空，本期没有可比较标的；不计算一致性比例。')

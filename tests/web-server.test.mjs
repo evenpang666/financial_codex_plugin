@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer, request as httpRequest } from 'node:http';
 import { mkdtemp, mkdir, writeFile, readFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
+import { createHash } from 'node:crypto';
 import { createFinanceServer, listen } from '../lib/server.mjs';
 
 async function fixture(t, research = async () => ({ text: '工具核对完成', tools: ['get_strategy_checkpoints'] }), {network = null, listenHost = '127.0.0.1', preferredPort = 0, dataHandler} = {}) {
@@ -11,7 +12,8 @@ async function fixture(t, research = async () => ({ text: '工具核对完成', 
   const backend = createServer(async (req, res) => {
     res.setHeader('Content-Type', 'application/json');
     if (dataHandler && await dataHandler(req, res)) return;
-    if (req.url === '/v1/daily-report?market=a&session=morning&candidate_limit=5') return res.end(JSON.stringify({ is_trading_day: true, markdown: '# 原始日报\n工具证据' }));
+    if (req.url === '/v1/daily-report?market=a&session=morning&candidate_limit=5') return res.end(JSON.stringify({ is_trading_day: true, as_of: '2026-10-16', markdown: '# 原始日报\n工具证据' }));
+    if (req.url === '/v1/daily-report?market=a&session=manual&candidate_limit=5') return res.end(JSON.stringify({ is_trading_day: true, as_of: '2026-10-16', report_id: '2026-10-16-a-manual-112233', markdown: '# 手动报告\n工具证据' }));
     if (req.url.startsWith('/v1/daily-report')) return res.end(JSON.stringify({ is_trading_day: false }));
     res.end(JSON.stringify({ path: req.url, origin: req.headers.origin || null }));
   });
@@ -84,6 +86,89 @@ test('strategy task settings remain inspectable without retaining unrelated requ
   const saved = (await (await fetch(base + '/api/jobs')).json()).jobs.find(item => item.id === job.id);
   assert.deepEqual(saved.configuration, configuration); assert.equal(saved.unrelated, undefined);
 });
+test('A-share pool choices reject unsupported task and market combinations', async t => {
+  const {base} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    res.end(JSON.stringify({strategies:{momentum:{}}, training:{elastic_net:{}}})); return true;
+  }});
+  for (const input of [
+    {kind:'backtest',market:'a',pool:'all',strategy:'momentum',start:'2025-01-01',end:'2025-12-31'},
+    {kind:'backtest',market:'hk',pool:'csi300',strategy:'momentum',start:'2025-01-01',end:'2025-12-31'},
+    {kind:'train',market:'a',pool:'all',strategy:'elastic_net',start:'2025-01-01',end:'2025-12-31'}
+  ]) {
+    const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify(input)});
+    const job = await finished(base,(await response.json()).id);
+    assert.equal(job.status,'failed'); assert.match(job.error,/不支持所选股票池/);
+  }
+});
+test('A-share training accepts index pool without custom symbols', async t => {
+  const {base, root} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    res.end(JSON.stringify({strategies:{}, training:{elastic_net:{}}})); return true;
+  }});
+  await mkdir(join(root,'scripts'));
+  await writeFile(join(root,'scripts/bar_strategy.py'), "import json,sys\nprint(json.dumps({'pool':sys.argv[sys.argv.index('--pool')+1], 'symbols_supplied':'--symbols' in sys.argv}))\n");
+  const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'train',market:'a',pool:'csi500',strategy:'elastic_net',start:'2025-01-01',end:'2025-12-31'})});
+  const job = await finished(base,(await response.json()).id);
+  assert.equal(job.status,'completed');
+  assert.deepEqual(job.result.data,{pool:'csi500',symbols_supplied:false});
+  assert.equal(job.configuration.pool,'csi500');
+});
+test('deployment refuses a model without a passing validation gate before running Python', async t => {
+  const {base, root} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    res.end(JSON.stringify({strategies:{'xgboost@legacy':{checkpoint_id:'legacy',validation:{passed:false}},momentum:{}},training:{}})); return true;
+  }});
+  const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'deploy',market:'a',pool:'csi300',strategy:'xgboost@legacy'})});
+  const job = await finished(base,(await response.json()).id);
+  assert.equal(job.status,'failed'); assert.match(job.error,/不能部署/);
+  await assert.rejects(readFile(join(root,'data/bar-deployments','latest-a-daily-xgboost-legacy-csi300.json')),{code:'ENOENT'});
+});
+test('trained model deletion removes only a verified checkpoint and preserves backtest archives', async t => {
+  const {base, root} = await fixture(t);
+  const id = 'a-daily-elastic_net-20261102T194145-ab12cd34';
+  const directory = join(root,'data/bar-models/a/daily',id);
+  await mkdir(directory,{recursive:true});
+  const weights = Buffer.from('{"coef":[0.1]}');
+  await writeFile(join(directory,'weights.json'),weights);
+  await writeFile(join(directory,'checkpoint.json'),JSON.stringify({market:'a',timeframe:'daily',model_id:id,algorithm:'elastic_net',artifact_sha256:createHash('sha256').update(weights).digest('hex')}));
+  const archive = join(root,'data/factor-lab/backtests','prior','summary.json');
+  await mkdir(join(root,'data/factor-lab/backtests','prior'),{recursive:true}); await writeFile(archive,'{}');
+  const path = `/api/bar-models/a/daily/${id}`;
+  assert.equal((await fetch(base+path,{method:'DELETE',headers:{Origin:'https://other.example'}})).status,403);
+  assert.equal((await fetch(base+'/api/bar-models/a/daily/../bad',{method:'DELETE'})).status,400);
+  assert.equal((await fetch(base+path,{method:'DELETE',headers:{Origin:base}})).status,200);
+  await assert.rejects(readFile(join(directory,'checkpoint.json')),{code:'ENOENT'});
+  assert.equal(await readFile(archive,'utf8'),'{}');
+  assert.equal((await fetch(base+path,{method:'DELETE'})).status,404);
+});
+test('model deletion refuses malformed or extra files', async t => {
+  const {base, root} = await fixture(t);
+  const id = 'a-daily-xgboost-20261102T194145-ab12cd34';
+  const directory = join(root,'data/bar-models/a/daily',id);
+  await mkdir(directory,{recursive:true});
+  await writeFile(join(directory,'weights.json'),'weights');
+  await writeFile(join(directory,'checkpoint.json'),JSON.stringify({market:'a',timeframe:'daily',model_id:id,algorithm:'xgboost',artifact_sha256:'wrong'}));
+  const path = `/api/bar-models/a/daily/${id}`;
+  assert.equal((await fetch(base+path,{method:'DELETE'})).status,409);
+  await writeFile(join(directory,'checkpoint.json'),JSON.stringify({market:'a',timeframe:'daily',model_id:id,algorithm:'xgboost',artifact_sha256:createHash('sha256').update('weights').digest('hex')}));
+  await writeFile(join(directory,'notes.txt'),'keep');
+  assert.equal((await fetch(base+path,{method:'DELETE'})).status,409);
+  assert.equal(await readFile(join(directory,'notes.txt'),'utf8'),'keep');
+});
+test('model deletion waits while a strategy task is running', async t => {
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  const {base, site} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    await gate; res.end(JSON.stringify({strategies:{},training:{elastic_net:{}}})); return true;
+  }});
+  const job = site.startJob({kind:'train',market:'a',pool:'csi300',strategy:'elastic_net',start:'2025-01-01',end:'2025-12-31'});
+  const response = await fetch(base+'/api/bar-models/a/daily/a-daily-elastic_net-20261102T120000-test',{method:'DELETE'});
+  assert.equal(response.status,409);
+  await fetch(base+`/api/jobs/${job.id}/cancel`,{method:'POST'});
+  release(); await finished(base,job.id);
+});
 test('text portfolio job uses Codex, resolves metadata and saves mixed markets through the data service', async t => {
   let saved = [{market:'a',symbol:'000858',shares:50}], imports = 0;
   const {base} = await fixture(t, async (_prompt, options) => {
@@ -145,13 +230,23 @@ test('edits wait for running portfolio imports and propagate missing holding err
   await fetch(base+`/api/jobs/${job.id}/cancel`,{method:'POST'}); await finished(base,job.id);
 });
 test('daily generation preserves original evidence, appends agent review and archives only on success', async t => {
-  const { base, root, site } = await fixture(t); const job = site.startJob({ kind: 'daily', market: 'a', session: 'morning' });
+  const { base, root, site } = await fixture(t); const job = site.startJob({ kind: 'daily', market: 'a', session: 'morning' }, {scheduled:true});
   const result = await finished(base, job.id); assert.equal(result.status, 'completed');
+  assert.equal(result.result.reportId, '2026-10-16-a-scheduled-morning'); assert.equal(result.title, '定时上午日报');
   const text = await readFile(join(root, 'data/reports', result.result.reportId + '.md'), 'utf8'); assert.match(text, /原始日报/); assert.match(text, /Codex 智能体复核/); assert.match(text, /工具核对完成/);
+});
+test('manual reports need no session and do not replace scheduled reports', async t => {
+  const { base, root, site } = await fixture(t);
+  const scheduled = await finished(base, site.startJob({kind:'daily', market:'a', session:'morning'}, {scheduled:true}).id);
+  const manual = await finished(base, site.startJob({kind:'daily', market:'a'}).id);
+  assert.equal(manual.status, 'completed'); assert.equal(manual.title, '手动报告');
+  assert.equal(manual.result.reportId, '2026-10-16-a-manual-112233');
+  assert.match(await readFile(join(root, 'data/reports', scheduled.result.reportId + '.md'), 'utf8'), /原始日报/);
+  assert.match(await readFile(join(root, 'data/reports', manual.result.reportId + '.md'), 'utf8'), /手动报告/);
 });
 test('non-trading day skips the model and does not create a report', async t => {
   let called = 0; const { base, site } = await fixture(t, async () => { called++; });
-  const result = await finished(base, site.startJob({ kind: 'daily', market: 'hk', session: 'afternoon' }).id); assert.equal(result.result.skipped, true); assert.equal(called, 0);
+  const result = await finished(base, site.startJob({ kind: 'daily', market: 'hk', session: 'afternoon' }, {scheduled:true}).id); assert.equal(result.result.skipped, true); assert.equal(called, 0);
 });
 test('concurrent jobs are refused and cancellation reaches the model', async t => {
   const { base, site } = await fixture(t, (_prompt, { signal }) => new Promise((_, reject) => signal.addEventListener('abort', () => reject(Error('cancelled')), { once: true })));
