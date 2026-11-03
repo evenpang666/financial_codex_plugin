@@ -1,3 +1,5 @@
+> 历史验收：本文记录迁移前 DSH 宿主的验证，当前 Codex 使用方式见[安装指南](getting-started.md)，当前开发检查见[开发文档](development.md)。
+
 # 网页迁移与回测验收
 
 验收环境：Windows、Node.js 24.21.0、Python 3.11、DSH 0.2.0-rc.2。验收日期：2026-10-17。

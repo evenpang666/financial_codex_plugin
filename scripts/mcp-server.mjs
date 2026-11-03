@@ -2,13 +2,18 @@ import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { ListToolsRequestSchema, CallToolRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import Ajv from 'ajv';
-import { createRuntime, researchTools } from '../lib/runtime.mjs';
+import { createRuntime, researchTools, root } from '../lib/runtime.mjs';
+import { ensureWorkspace } from '../lib/workspace.mjs';
 import { extraTools } from '../lib/plugin-tools.mjs';
 const only=process.argv.includes('--tools-only');
-let dataRuntime,webRuntime,dataPending,webPending;
+let dataRuntime,dataPending,webPending;
 async function runtime(web=false) {
-  if(web) return webRuntime || (webPending ||= createRuntime({web:true}).then(r=>webRuntime=r).catch(e=>{webPending=null;throw e;}));
-  return webRuntime || dataRuntime || (dataPending ||= createRuntime().then(r=>dataRuntime=r).catch(e=>{dataPending=null;throw e;}));
+  if(web) {
+    if(webPending) return webPending;
+    webPending=ensureWorkspace(root).finally(()=>{webPending=null;});
+    return webPending;
+  }
+  return dataRuntime || (dataPending ||= createRuntime().then(r=>dataRuntime=r).catch(e=>{dataPending=null;throw e;}));
 }
 const tools=researchTools('http://127.0.0.1:0').map(t=>({...t,execute:async args=>{const r=await runtime();return r.tools.find(tool=>tool.name===t.name).execute(args);}}));
 if(!only)tools.push(...extraTools(runtime));
@@ -28,6 +33,9 @@ server.setRequestHandler(CallToolRequestSchema,async request=>{
   }catch(e){return {isError:true,content:[{type:'text',text:e.message}]};}
 });
 let closing=false;
-async function close(){if(closing)return;closing=true;for(const r of await Promise.allSettled([dataPending,webPending]))if(r.status==='fulfilled'&&r.value)await r.value.close();await server.close();process.exit(0);}
+async function close(){if(closing)return;closing=true;if(dataPending){const r=await dataPending.catch(()=>null);if(r)await r.close();}await server.close();process.exit(0);}
 process.on('SIGINT',close);process.on('SIGTERM',close);process.stdin.on('end',close);
 await server.connect(new StdioServerTransport());
+// Keep MCP discovery responsive; service readiness is awaited by web tools.
+// The shared background service survives an individual chat ending.
+if(!only && process.env.FINANCE_WEB_AUTOSTART !== '0') void runtime(true).then(r=>console.error(`[知衡工作台] ${r.url}`),e=>console.error('[知衡工作台自动启动失败]',e.message));

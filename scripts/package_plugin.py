@@ -11,7 +11,7 @@ files=[ROOT/name for name in ['.mcp.json','marketplace.example.json','.env.examp
 for folder in folders:
     files.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.log','.tmp'))
 files.extend((ROOT/'config').glob('*.example.*'))
-files.extend((ROOT/'docs').glob('*.md'))
+files.extend(p for p in (ROOT/'docs').rglob('*') if p.is_file() and p.suffix.lower() in {'.md', '.png', '.jpg', '.jpeg', '.svg', '.webp'})
 with ZipFile(target,'w',ZIP_DEFLATED) as archive:
     for path in sorted(set(files)):
         archive.write(path,path.relative_to(ROOT).as_posix())

@@ -26,7 +26,7 @@ test('US portfolio parses literal class tickers and fractional shares',()=>{
   assert.throws(()=>parsePortfolio('美股 MSFT 1股',JSON.stringify({holdings:[{market:'us',symbol:'AAPL',quantity:'1股',source:'美股 MSFT 1股'}],issues:[]})));
 });
 test('real stdio MCP handshake, tool discovery, schema rejection and Python calendar call', {timeout:90000},async t=>{
-  const transport=new StdioClientTransport({command:process.execPath,args:['scripts/mcp-server.mjs'],cwd:process.cwd(),stderr:'pipe',env:{...process.env,PYTHONIOENCODING:'utf-8'}});
+  const transport=new StdioClientTransport({command:process.execPath,args:['scripts/mcp-server.mjs'],cwd:process.cwd(),stderr:'pipe',env:{...process.env,PYTHONIOENCODING:'utf-8',FINANCE_WEB_AUTOSTART:'0'}});
   const client=new Client({name:'financial-test',version:'1.0.0'});
   t.after(()=>client.close());await client.connect(transport);
   const listed=await client.listTools();assert.equal(listed.tools.length,32);
