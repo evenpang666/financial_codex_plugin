@@ -22,6 +22,29 @@ def daily_history():
 
 
 class BarStrategyTests(unittest.TestCase):
+    def test_holding_pool_backtest_saves_snapshot_and_keeps_custom_limit(self):
+        with tempfile.TemporaryDirectory(dir=TEMP) as directory, patch.object(bar, "BACKTESTS", Path(directory)), patch.object(bar, "history", side_effect=lambda *_: daily_history()):
+            result = bar.run("backtest", "us", "daily", "momentum", ["AAPL"], "2024-01-01", "2026-03-25", pool="portfolio", pool_as_of="2026-11-03T05:00:00Z")
+            self.assertEqual(result["pool"]["id"], "portfolio")
+            self.assertEqual(result["pool"]["as_of"], "2026-11-03T05:00:00Z")
+            self.assertEqual(result["universe"], ["AAPL"])
+            self.assertIn("持股数量", result["pool"]["membership_policy"])
+        symbols = [f"{600000+i}" for i in range(100)]
+        self.assertEqual(len(bar.resolve_pool("backtest", "a", "portfolio", symbols)[0]), 100)
+        with self.assertRaises(ValueError):
+            bar.resolve_pool("backtest", "a", "custom", symbols)
+        with self.assertRaises(ValueError):
+            bar.resolve_pool("train", "a", "portfolio", ["600519"])
+
+    def test_holding_deployment_is_saved_separately_from_custom_pool(self):
+        dates = pd.bdate_range(end=pd.Timestamp.now().normalize() - pd.Timedelta(days=1), periods=150)
+        frame = daily_history().tail(len(dates)).copy(); frame["date"] = dates
+        with tempfile.TemporaryDirectory(dir=TEMP) as directory, patch.object(bar, "DEPLOYMENTS", Path(directory)), patch.object(bar, "history", return_value=frame):
+            result = bar.run("deploy", "us", "daily", "momentum", ["AAPL"], "", "", pool="portfolio")
+            self.assertEqual(result["pool"]["id"], "portfolio")
+            self.assertTrue((Path(directory) / "latest-us-daily-momentum-portfolio.json").is_file())
+            self.assertFalse((Path(directory) / "latest-us-daily-momentum-custom.json").exists())
+
     def test_completed_week_and_month_exclude_partial_period(self):
         frame = daily_history()
         week = bar.completed_bars(frame, "weekly", "2026-03-25")

@@ -58,6 +58,7 @@
   }
   async function load() { const current = ++generation; try { const data = await api('/api/portfolio'); if (!busy && current === generation) { render(data.holdings || []); status.textContent = ''; } } catch (error) { if (current === generation) status.textContent = error.message; } }
   panel.addEventListener('toggle', () => { if (panel.open && !busy) void load(); });
+  document.addEventListener('portfolio-refresh', () => { if (panel.open && !busy) void load(); });
   document.querySelector('#portfolioEntryOpen').addEventListener('click', () => { panel.open = true; panel.scrollIntoView({behavior: 'smooth', block: 'start'}); input.focus({preventScroll: true}); });
   if (location.hash === '#portfolioEntry') panel.open = true;
   async function track(id) {

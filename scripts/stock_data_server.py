@@ -11,8 +11,10 @@ import json
 import importlib
 import math
 import logging
+import re
 import sys
 import us_market as us
+from functools import lru_cache
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -39,6 +41,7 @@ HOST, PORT = "127.0.0.1", 8765
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 PORTFOLIO_FILE = PROJECT_ROOT / "data" / "portfolio.json"
 PORTFOLIO_LOCK = RLock()
+HISTORY_SINA_LOCK = RLock()
 EVENT_ARCHIVE_FILE = PROJECT_ROOT / "data" / "market-events.json"
 REPORT_SNAPSHOT_DIR = PROJECT_ROOT / "data" / "report-snapshots"
 REFLECTION_FILE = PROJECT_ROOT / "data" / "research-reflections.json"
@@ -1035,7 +1038,10 @@ def history(symbol: str, start: str = "", end: str = "", adjust: str = "qfq", ma
             if symbol.startswith(("4", "8")):
                 raise primary_error
             exchange_symbol = ("sh" if symbol.startswith(("5", "6", "9")) else "sz") + symbol
-            frame = ak.stock_zh_a_daily(symbol=exchange_symbol, start_date=start_date, end_date=end_date, adjust=adjust or "")
+            # Sina's native JS runtime can abort the process when initialized by
+            # several holding-chart requests concurrently. Keep this fallback serial.
+            with HISTORY_SINA_LOCK:
+                frame = ak.stock_zh_a_daily(symbol=exchange_symbol, start_date=start_date, end_date=end_date, adjust=adjust or "")
             source = "AKShare stock_zh_a_daily (Sina fallback)"
     if frame.empty:
         raise ValueError("未返回历史行情；请确认代码、日期区间和数据源状态。")
@@ -1574,6 +1580,122 @@ def horizon_recommendations(candidates: dict, market: str, panorama: dict):
             "horizons": result, "note": "仅为有限候选池的研究观察名单；证据不足时留空，不代表全市场最优或个性化买入建议。"}
 
 
+@lru_cache(maxsize=256)
+def portfolio_history_data(market: str, symbol: str, end_day: str, years: int = 1):
+    if years not in (1, 5):
+        raise ValueError("历史范围仅支持1年或5年。")
+    start = (pd.Timestamp(end_day) - pd.Timedelta(days=365 * years + 55)).date().isoformat()
+    frame = history(symbol, start, end_day, "qfq", market)
+    source = frame.attrs.get("source", "AKShare history")
+    adjustment = frame.attrs.get("adjustment", "split_dividend" if market == "us" else "qfq")
+    frame = frame.copy()
+    frame["date"] = pd.to_datetime(frame["date"], errors="coerce").dt.tz_localize(None).dt.normalize()
+    frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
+    frame = frame[frame.date.notna() & (frame.date <= pd.Timestamp(end_day)) & np.isfinite(frame.close) & (frame.close > 0)]
+    frame = frame.sort_values("date").drop_duplicates("date", keep="last").tail(260 * years)
+    points = []
+    for row in frame.to_dict("records"):
+        volume = safe_float(row.get("volume"))
+        ohlc = {key: safe_float(row.get(key)) for key in ("open", "high", "low")}
+        ohlc = {key: value if value is not None and value > 0 else None for key, value in ohlc.items()}
+        if all(value is not None for value in ohlc.values()) and not (ohlc["low"] <= min(ohlc["open"], row["close"]) <= max(ohlc["open"], row["close"]) <= ohlc["high"]):
+            ohlc = dict.fromkeys(ohlc)
+        points.append({"date": iso_date(row["date"]), **ohlc, "close": float(row["close"]),
+                       "volume": volume if volume is not None and volume >= 0 else None})
+    if len(points) < 2:
+        raise ValueError("已完成交易日的有效历史行情不足两条，暂不能绘制走势。")
+    return {"available": True, "symbol": symbol, "market": market, "points": points,
+            "history_from": start, "history_through": end_day, "history_years": years,
+            "as_of": points[-1]["date"], "source": source, "adjust": adjustment,
+            "currency": {"a": "CNY", "hk": "HKD", "us": "USD"}[market],
+            "volume_unit": frame.attrs.get("volume_unit", "股" if market == "us" or "stock_zh_a_daily" in source else "原始单位"),
+            "note": "仅展示已完成交易日的复权收盘价；最新行情与历史走势的价格口径可能不同。"}
+
+
+def portfolio_history_response(market: str, symbol: str, years: int = 1):
+    market = normalize_market(market)
+    symbol = normalize_symbol(symbol, market)
+    if years not in (1, 5):
+        raise ValueError("历史范围仅支持1年或5年。")
+    if not any((row.get("market", "a"), row["symbol"]) == (market, symbol) for row in portfolio_response()["holdings"]):
+        raise ValueError("该股票不在当前市场的已保存持仓中。")
+    return stock_history_response(market, symbol, years)
+
+
+def stock_history_response(market: str, symbol: str, years: int = 1):
+    """Read-only price history for report stocks, independently of saved holdings."""
+    market = normalize_market(market)
+    pattern = r"\d{6}" if market == "a" else r"\d{1,5}" if market == "hk" else r"[A-Z][A-Z0-9]{0,9}(?:[.-][A-Z0-9]{1,3})?"
+    if not re.fullmatch(pattern, str(symbol)) or (market != "us" and int(symbol) == 0):
+        raise ValueError("市场与股票代码无效。")
+    symbol = normalize_symbol(symbol, market)
+    if years not in (1, 5):
+        raise ValueError("历史范围仅支持1年或5年。")
+    zone = ZoneInfo("America/New_York" if market == "us" else "Asia/Hong_Kong" if market == "hk" else "Asia/Shanghai")
+    end_day = (datetime.now(zone).date() - timedelta(days=1)).isoformat()
+    return portfolio_history_data(market, symbol, end_day, years) if years != 1 else portfolio_history_data(market, symbol, end_day)
+
+
+def portfolio_quote_batch(holdings: list[dict], market: str) -> dict:
+    if not holdings or market == "us":
+        return {}
+    tokens = {}
+    for row in holdings:
+        symbol = row["symbol"]
+        prefix = "hk" if market == "hk" else "bj" if symbol.startswith(("4", "8", "92")) else "sh" if symbol.startswith(("5", "6", "9")) else "sz"
+        tokens[prefix + symbol] = symbol
+    response = requests.get("https://qt.gtimg.cn/q=" + ",".join(tokens), timeout=(5, 12))
+    response.raise_for_status()
+    response.encoding = "gbk"
+    quotes = {}
+    zone = ZoneInfo("Asia/Hong_Kong" if market == "hk" else "Asia/Shanghai")
+    for statement in response.text.split(";"):
+        if '=\"' not in statement:
+            continue
+        key, body = statement.strip().split('=\"', 1)
+        symbol = tokens.get(key.removeprefix("v_"))
+        fields = body.rsplit('\"', 1)[0].split("~")
+        if not symbol or len(fields) <= 32 or fields[2] != symbol:
+            continue
+        price, previous, change = (safe_float(fields[i]) for i in (3, 4, 32))
+        if price is None or price <= 0 or previous is None or previous <= 0 or change is None or abs((price / previous - 1) * 100 - change) > .1:
+            continue
+        raw_time = fields[30]
+        quote_time = pd.to_datetime(raw_time, format="%Y%m%d%H%M%S", errors="coerce") if raw_time.isdigit() else pd.to_datetime(raw_time, errors="coerce")
+        if pd.isna(quote_time):
+            continue
+        quotes[symbol] = {"symbol": symbol, "price": price, "change_pct": change,
+                          "as_of": quote_time.to_pydatetime().replace(tzinfo=zone).isoformat(),
+                          "source": "Tencent quote snapshot (qt.gtimg.cn)"}
+    return quotes
+
+
+def portfolio_quotes_response(market: str = "a"):
+    market = normalize_market(market)
+    holdings = [row for row in portfolio_response()["holdings"] if row.get("market", "a") == market]
+    try:
+        batch = portfolio_quote_batch(holdings, market)
+    except Exception:
+        batch = {}
+
+    def load(holding):
+        symbol = holding["symbol"]
+        if symbol in batch:
+            return batch[symbol]
+        try:
+            snapshot = quote_response(symbol, market)
+            quote = snapshot.get("quote", {})
+            return {"symbol": symbol, "price": report_item_price(snapshot),
+                    "change_pct": safe_float(first_value(quote, "涨跌幅", "zdf")),
+                    "as_of": snapshot.get("as_of"), "source": snapshot.get("source")}
+        except Exception as exc:
+            return {"symbol": symbol, "price": None, "error": "；".join(readable_issues([str(exc)]))}
+
+    with ThreadPoolExecutor(max_workers=4) as executor:
+        quotes = list(executor.map(load, holdings))
+    return {"market": market, "currency": {"a": "CNY", "hk": "HKD", "us": "USD"}[market], "quotes": quotes}
+
+
 def portfolio_analysis_response(market: str = "a", strategy: str = "", checkpoint_id: str = "", parameters=None):
     from portfolio_research import strategy_review, build_position_summary
     market = normalize_market(market)
@@ -1802,6 +1924,12 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json(200, {"status": "ok", "bind": f"{HOST}:{PORT}", "mode": "research-only; local portfolio storage"})
             if parsed.path == "/v1/portfolio":
                 return self.send_json(200, portfolio_response())
+            if parsed.path == "/v1/portfolio-quotes":
+                return self.send_json(200, portfolio_quotes_response(value("market", "a")))
+            if parsed.path == "/v1/portfolio-history":
+                return self.send_json(200, portfolio_history_response(value("market", "a"), value("symbol"), int(value("years", "1"))))
+            if parsed.path == "/v1/stock-history":
+                return self.send_json(200, stock_history_response(value("market", "a"), value("symbol"), int(value("years", "1"))))
             if parsed.path == "/v1/portfolio-analysis":
                 return self.send_json(200, portfolio_analysis_response(value("market", "a"), value("strategy"), value("checkpoint"),
                                                                            json.loads(value("parameters", "null"))))

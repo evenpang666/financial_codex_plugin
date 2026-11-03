@@ -124,6 +124,103 @@ test('deployment refuses a model without a passing validation gate before runnin
   assert.equal(job.status,'failed'); assert.match(job.error,/不能部署/);
   await assert.rejects(readFile(join(root,'data/bar-deployments','latest-a-daily-xgboost-legacy-csi300.json')),{code:'ENOENT'});
 });
+
+test('holding page and its assets are served independently of the custom backtest page', async t => {
+  const {base, root} = await fixture(t);
+  for (const file of ['portfolio.html', 'portfolio.js', 'portfolio-analysis.js', 'portfolio-charts.js', 'portfolio.css', 'dark-ui.css']) {
+    await writeFile(join(root, 'web', file), await readFile(new URL('../web/' + file, import.meta.url)));
+    const response = await fetch(base + '/' + file); assert.equal(response.status, 200);
+  }
+  for (const path of ['/portfolio', '/portfolio/?market=hk']) {
+    const html = await (await fetch(base + path)).text();
+    assert.match(html, /我的持仓/); assert.match(html, /portfolioTaskForm/); assert.doesNotMatch(html, /src="\/app.js"/);
+  }
+  const page = await readFile(new URL('../web/index.html', import.meta.url), 'utf8');
+  assert.match(page, /href="\/portfolio"/); assert.doesNotMatch(page, /id="portfolioTools"|id="portfolioEntryForm"/);
+  for (const file of ['home.html', 'index.html', 'backtests.html', 'portfolio.html']) {
+    const html = await readFile(new URL('../web/' + file, import.meta.url), 'utf8');
+    assert.ok(html.indexOf('href="/dark-ui.css"') > html.indexOf('href="/soft-ui.css"'), `${file} loads the default dark theme after shared styles`);
+  }
+});
+
+test('holding pool tasks resolve a market-specific server snapshot and ignore submitted symbols', async t => {
+  let saved = [{symbol:'600519',shares:100}, {market:'hk',symbol:'00700',shares:200}, {market:'us',symbol:'AAPL',shares:1.5}];
+  const {base, root} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (req.url === '/v1/portfolio') { res.end(JSON.stringify({holdings:saved})); return true; }
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    res.end(JSON.stringify({strategies:{momentum:{}},training:{}})); return true;
+  }});
+  await mkdir(join(root,'scripts'));
+  await writeFile(join(root,'scripts/bar_strategy.py'), "import json,sys\nargs=sys.argv\nprint(json.dumps({'symbols':args[args.index('--symbols')+1], 'pool':args[args.index('--pool')+1], 'as_of':args[args.index('--pool-as-of')+1]}))\n");
+  for (const [market, symbol, kind] of [['a','600519','backtest'], ['hk','00700','deploy'], ['us','AAPL','backtest']]) {
+    const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind,market,pool:'portfolio',symbols:['UNRELATED'],strategy:'momentum',start:'2025-01-01',end:'2025-12-31'})});
+    const job = await finished(base,(await response.json()).id);
+    assert.equal(job.status,'completed', job.error); assert.equal(job.result.data.symbols,symbol); assert.equal(job.result.data.pool,'portfolio');
+    assert.deepEqual(job.configuration.symbols,[symbol]); assert.equal(job.configuration.poolAsOf,job.result.data.as_of);
+    assert.match(job.title,/持仓股票池/);
+  }
+  saved = [{market:'us',symbol:'MSFT',shares:4}];
+  const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'deploy',market:'us',pool:'portfolio',strategy:'momentum'})});
+  const job = await finished(base,(await response.json()).id); assert.deepEqual(job.configuration.symbols,['MSFT']);
+});
+
+test('all workspace pages share navigation order and identify their current page', async () => {
+  const expected = [{href:'/',label:'研究'},{href:'/reports',label:'日报'},{href:'/portfolio',label:'持仓'},{href:'/backtests',label:'回测'}];
+  for (const [file, current] of [['home.html','/'],['index.html','/reports'],['portfolio.html','/portfolio'],['backtests.html','/backtests']]) {
+    const html = await readFile(new URL('../web/' + file, import.meta.url), 'utf8');
+    const navigation = html.match(/<nav class="workspace-navigation" aria-label="工作台导航">([\s\S]*?)<\/nav>/)?.[1];
+    assert.ok(navigation, `${file} has the shared workspace navigation`);
+    const links = [...navigation.matchAll(/<a href="([^"]+)"([^>]*)>([^<]+)<\/a>/g)];
+    assert.deepEqual(links.map(match=>({href:match[1],label:match[3]})),expected,file);
+    assert.deepEqual(links.filter(match=>match[2].includes('aria-current="page"')).map(match=>match[1]),[current],file);
+  }
+});
+
+test('empty holdings and holding-pool training fail before launching a strategy process', async t => {
+  const {base} = await fixture(t, undefined, {dataHandler: async (req,res) => {
+    if (req.url === '/v1/portfolio') {res.end(JSON.stringify({holdings:[]})); return true;}
+    if (!req.url.startsWith('/api/bar-strategies')) return false;
+    res.end(JSON.stringify({strategies:{momentum:{}},training:{elastic_net:{}}})); return true;
+  }});
+  for (const [kind,strategy,message] of [['deploy','momentum',/没有已保存持仓/],['train','elastic_net',/不支持所选股票池/]]) {
+    const response = await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind,strategy,pool:'portfolio',start:'2025-01-01',end:'2025-12-31'})});
+    const job = await finished(base,(await response.json()).id); assert.equal(job.status,'failed'); assert.match(job.error,message);
+  }
+});
+
+test('holding quote endpoint validates the market before forwarding', async t => {
+  const paths = []; const {base} = await fixture(t,undefined,{dataHandler:async(req,res)=>{
+    if (!req.url.startsWith('/v1/portfolio-quotes')) return false;
+    paths.push(req.url); res.end(JSON.stringify({market:'hk',quotes:[]})); return true;
+  }});
+  assert.equal((await fetch(base+'/api/portfolio-quotes?market=invalid')).status,400);
+  assert.equal((await fetch(base+'/api/portfolio-quotes?market=hk')).status,200);
+  assert.deepEqual(paths,['/v1/portfolio-quotes?market=hk']);
+});
+
+test('holding history validates identities and forwards the exact selected market and symbol', async t => {
+  const paths=[]; const {base}=await fixture(t,undefined,{dataHandler:async(req,res)=>{
+    if(!req.url.startsWith('/v1/portfolio-history'))return false;
+    paths.push(req.url);res.end(JSON.stringify({available:true,points:[]}));return true;
+  }});
+  for(const query of ['market=invalid&symbol=AAPL','market=a&symbol=00700','market=us&symbol=../secret','market=a&symbol=600519&years=20'])assert.equal((await fetch(base+'/api/portfolio-history?'+query)).status,400);
+  assert.equal((await fetch(base+'/api/portfolio-history?market=hk&symbol=00700')).status,200);
+  assert.deepEqual(paths,['/v1/portfolio-history?market=hk&symbol=00700']);
+  assert.equal((await fetch(base+'/api/portfolio-history?market=a&symbol=600519&years=5')).status,200);
+  assert.equal(paths[1],'/v1/portfolio-history?market=a&symbol=600519&years=5');
+});
+
+test('report stock history is a separate read-only route for stocks outside the holding pool', async t => {
+  const paths = []; const {base} = await fixture(t, undefined, {dataHandler: async (req, res) => {
+    if (!req.url.startsWith('/v1/stock-history')) return false;
+    paths.push(req.url); res.end(JSON.stringify({available: true, symbol: '002946', market: 'a', points: []})); return true;
+  }});
+  for (const query of ['market=a&symbol=../../secret', 'market=a&symbol=00700', 'market=us&symbol=<script>', 'market=a&symbol=002946&years=100']) {
+    assert.equal((await fetch(base + '/api/stock-history?' + query)).status, 400);
+  }
+  assert.equal((await fetch(base + '/api/stock-history?market=a&symbol=002946&years=5')).status, 200);
+  assert.deepEqual(paths, ['/v1/stock-history?market=a&symbol=002946&years=5']);
+});
 test('trained model deletion removes only a verified checkpoint and preserves backtest archives', async t => {
   const {base, root} = await fixture(t);
   const id = 'a-daily-elastic_net-20261102T194145-ab12cd34';

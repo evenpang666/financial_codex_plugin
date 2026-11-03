@@ -15,6 +15,24 @@ spec.loader.exec_module(report_web)
 
 
 class ReportWebServerTests(unittest.TestCase):
+    def test_holding_backtests_do_not_mix_with_custom_results(self):
+        records = [{"run_id": "holding", "pool": {"id": "portfolio"}}, {"run_id": "custom", "pool": {"id": "custom"}}, {"run_id": "legacy"}]
+        with patch.object(report_web, "backtest_runs", return_value=records):
+            handler = self.handler("/api/backtests?pool=portfolio"); handler.do_GET()
+            self.assertEqual([row["run_id"] for row in handler.send_json.call_args.args[1]["runs"]], ["holding"])
+            handler = self.handler("/api/backtests"); handler.do_GET()
+            self.assertEqual([row["run_id"] for row in handler.send_json.call_args.args[1]["runs"]], ["custom", "legacy"])
+
+    def test_holding_deployment_lookup_does_not_fall_back_to_custom(self):
+        with tempfile.TemporaryDirectory() as directory, patch.object(report_web, "PROJECT_ROOT", Path(directory)):
+            target = Path(directory) / "data/bar-deployments"; target.mkdir(parents=True)
+            (target / "latest-us-daily-momentum-custom.json").write_text(json.dumps({"available": True, "pool": {"id": "custom"}}))
+            handler = self.handler("/api/bar-deployment?market=us&timeframe=daily&strategy=momentum&pool=portfolio"); handler.do_GET()
+            self.assertEqual(handler.send_json.call_args.args, (200, {"available": False}))
+            (target / "latest-us-daily-momentum-portfolio.json").write_text(json.dumps({"available": True, "pool": {"id": "portfolio"}}))
+            handler.do_GET()
+            self.assertEqual(handler.send_json.call_args.args[1]["pool"]["id"], "portfolio")
+
     def handler(self, path, headers=None):
         handler = object.__new__(report_web.ReportHandler)
         handler.path = path

@@ -32,7 +32,7 @@ HISTORY_CACHE = ROOT / "data/bar-history"
 PERIODS = {"daily": "日线", "weekly": "周线", "monthly": "月线"}
 ZONES = {"a": "Asia/Shanghai", "hk": "Asia/Hong_Kong", "us": "America/New_York"}
 BAR_NAMES = {"momentum": "K线动量", "breakout": "区间突破"}
-POOL_NAMES = {"custom": "自定股票池", "csi300": "沪深300", "csi500": "中证500", "all": "全盘"}
+POOL_NAMES = {"custom": "自定股票池", "portfolio": "持仓股票池", "csi300": "沪深300", "csi500": "中证500", "all": "全盘"}
 
 
 class IncompleteHistoryError(ValueError):
@@ -76,8 +76,11 @@ def historical_index_pool(pool, start):
 
 
 def resolve_pool(action, market, pool, symbols, start=None):
-    if pool not in POOL_NAMES or (market != "a" and pool != "custom") or (pool == "all" and action != "deploy"):
+    if pool not in POOL_NAMES or (market != "a" and pool not in ("custom", "portfolio")) or (pool == "all" and action != "deploy") or (pool == "portfolio" and action == "train"):
         raise ValueError("当前任务或市场不支持所选股票池。")
+    if pool == "portfolio":
+        return normalize_symbols(market, symbols, limit=100), {"id": pool, "name": POOL_NAMES[pool], "source": "本地已保存持仓快照", "as_of": None,
+            "membership_policy": "启动时持仓名单固定；仅使用代码，不按实际持股数量或成本配置；当前名单用于历史回测存在幸存者偏差"}
     if pool == "custom":
         return normalize_symbols(market, symbols), {"id": pool, "name": POOL_NAMES[pool], "source": "用户输入", "as_of": None}
     if pool in ("csi300", "csi500") and action in ("train", "backtest"):
@@ -123,7 +126,7 @@ def selection(market, timeframe):
     return market, timeframe
 
 
-def normalize_symbols(market, symbols):
+def normalize_symbols(market, symbols, limit=50):
     selection(market, "daily")
     if isinstance(symbols, str):
         symbols = [part.strip() for part in symbols.replace("，", ",").split(",")]
@@ -139,8 +142,8 @@ def normalize_symbols(market, symbols):
         from stock_data_server import normalize_symbol as market_symbol
         normalize_symbol = lambda value: market_symbol(value, market)
     result = list(dict.fromkeys(normalize_symbol(value) for value in symbols if value))
-    if not 1 <= len(result) <= 50:
-        raise ValueError("请选择 1–50 只当前研究股票；固定股票池可能存在幸存者偏差。")
+    if not 1 <= len(result) <= limit:
+        raise ValueError(f"请选择 1–{limit} 只当前研究股票；固定股票池可能存在幸存者偏差。")
     return result
 
 
@@ -524,7 +527,7 @@ def simulate(frame, market, timeframe, start, end, top_n, fee_bps=5, slippage_bp
     return pd.DataFrame(curve), pd.DataFrame(trades, columns=["day", "signal_day", "symbol", "shares", "entry", "exit", "cost", "return"]), stats
 
 
-def run(action, market, timeframe, strategy, symbols, start, end, parameters=None, checkpoint="", pool="custom"):
+def run(action, market, timeframe, strategy, symbols, start, end, parameters=None, checkpoint="", pool="custom", pool_as_of=""):
     selection(market, timeframe)
     if strategy not in STRATEGIES:
         raise ValueError("策略无效。")
@@ -545,8 +548,10 @@ def run(action, market, timeframe, strategy, symbols, start, end, parameters=Non
         if selected is None or selected.get("validation", {}).get("passed") is not True:
             raise ValueError("该模型未通过或未记录验证门槛，仅可用于回测研究，不能部署。")
     symbols, pool_info = resolve_pool(action, market, pool, symbols, start)
+    if pool == "portfolio":
+        pool_info["as_of"] = pool_as_of or datetime.now(ZoneInfo(ZONES[market])).isoformat(timespec="seconds")
     frame = panel(market, timeframe, symbols, start, end, strategy, params,
-                  allow_missing=pool != "custom", require_recent=action != "train",
+                  allow_missing=pool not in ("custom", "portfolio"), require_recent=action != "train",
                   strict_stale=action == "backtest" and pool in ("csi300", "csi500"))
     failures = frame.attrs.get("failures", [])
     valid_symbols = frame.attrs.get("valid_symbols", symbols)
@@ -566,7 +571,7 @@ def run(action, market, timeframe, strategy, symbols, start, end, parameters=Non
                   "strategy_parameters": params, "generated_at": datetime.now(ZoneInfo(ZONES[market])).isoformat(),
                   "as_of": str(frame.date.max().date()), "ranking": rows, "input_count": len(symbols),
                   "valid_count": len(valid_symbols), "ranked_count": len(rows),
-                  "note": "指数及全盘使用当前股票名单；信号使用已完成K线，不代表交易指令。"}
+                  "note": "持仓池使用启动时保存的股票名单，不按实际持股数量配置；信号使用已完成K线。" if pool == "portfolio" else "指数及全盘使用当前股票名单；信号使用已完成K线，不代表交易指令。"}
         DEPLOYMENTS.mkdir(parents=True, exist_ok=True)
         suffix = f"-{checkpoint}" if checkpoint else ""
         save_json(DEPLOYMENTS / f"latest-{market}-{timeframe}-{strategy}{suffix}-{pool}.json", result)
@@ -616,6 +621,7 @@ if __name__ == "__main__":
     parser.add_argument("--strategy", required=True, choices=tuple(STRATEGIES))
     parser.add_argument("--symbols", default="")
     parser.add_argument("--pool", default="custom", choices=tuple(POOL_NAMES))
+    parser.add_argument("--pool-as-of", default="")
     parser.add_argument("--start", default="")
     parser.add_argument("--end", default="")
     parser.add_argument("--parameters", default="{}")
@@ -625,7 +631,7 @@ if __name__ == "__main__":
         from web_process_owner import watch_owner
         watch_owner()
     result = run(args.action, args.market, args.timeframe, args.strategy, args.symbols,
-                 args.start, args.end, json.loads(args.parameters), args.checkpoint, args.pool)
+                 args.start, args.end, json.loads(args.parameters), args.checkpoint, args.pool, args.pool_as_of)
     output = ({key: result[key] for key in ("available", "pool", "input_count", "valid_count", "ranked_count")}
               if args.action == "deploy" else
               {key: result[key] for key in ("model_id", "pool", "requested_count", "valid_count", "validation_mse")}

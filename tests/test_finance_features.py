@@ -33,10 +33,10 @@ class FakeAkshare(types.ModuleType):
         ])
 
 
-sys.modules["akshare"] = FakeAkshare("akshare")
 spec = importlib.util.spec_from_file_location("stock_data_server", ROOT / "scripts" / "stock_data_server.py")
 server = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(server)
+with patch.dict(sys.modules, {"akshare": FakeAkshare("akshare")}):
+    spec.loader.exec_module(server)
 
 
 class FinanceFeatureTests(unittest.TestCase):

@@ -326,7 +326,7 @@ class ReportHandler(BaseHTTPRequestHandler):
                 market, timeframe, strategy, checkpoint = (query.get(key, [""])[0] for key in ("market", "timeframe", "strategy", "checkpoint"))
                 pool = query.get("pool", ["custom"])[0]
                 from bar_strategy import PERIODS, ZONES
-                if market not in ZONES or timeframe not in PERIODS or strategy not in STRATEGIES or not re.fullmatch(r"[A-Za-z0-9-]{0,100}", checkpoint) or pool not in {"custom", "csi300", "csi500", "all"} or (market != "a" and pool != "custom"):
+                if market not in ZONES or timeframe not in PERIODS or strategy not in STRATEGIES or not re.fullmatch(r"[A-Za-z0-9-]{0,100}", checkpoint) or pool not in {"custom", "portfolio", "csi300", "csi500", "all"} or (market != "a" and pool not in {"custom", "portfolio"}):
                     return self.send_json(400, {"error": "部署查询参数无效。"})
                 suffix = f"-{checkpoint}" if checkpoint else ""
                 target = PROJECT_ROOT / "data" / "bar-deployments" / f"latest-{market}-{timeframe}-{strategy}{suffix}-{pool}.json"
@@ -368,7 +368,9 @@ class ReportHandler(BaseHTTPRequestHandler):
             if path == "/api/backtest/latest":
                 return self.send_json(200, latest_backtest())
             if path == "/api/backtests":
-                return self.send_json(200, {"runs": backtest_runs(), "strategies": STRATEGIES})
+                portfolio = parse_qs(urlparse(self.path).query).get("pool", [""])[0] == "portfolio"
+                runs = [run for run in backtest_runs() if (run.get("pool", {}).get("id") == "portfolio") == portfolio]
+                return self.send_json(200, {"runs": runs, "strategies": STRATEGIES})
             if path.startswith("/api/backtests/"):
                 parts = path.removeprefix("/api/backtests/").split("/")
                 if not RUN_ID.fullmatch(parts[0]):
@@ -400,7 +402,7 @@ class ReportHandler(BaseHTTPRequestHandler):
                 asset = "backtests.html"
             else:
                 asset = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
-            if asset not in {"index.html", "styles.css", "app.js", "deployment.js", "report-visuals.js", "backtests.html", "backtests.js", "soft-ui.css", "task-controls.js", "icon.svg"}:
+            if asset not in {"index.html", "styles.css", "app.js", "deployment.js", "report-visuals.js", "backtests.html", "backtests.js", "soft-ui.css", "dark-ui.css", "task-controls.js", "icon.svg"}:
                 return self.send_json(404, {"error": "Not found"})
             target = WEB_ROOT / asset
             content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
