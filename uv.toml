@@ -1,0 +1,4 @@
+# Project-local defaults; user uv configuration (indexes, proxy/TLS, etc.) is inherited.
+# Do not commit machine-specific index URLs or credentials here.
+cache-dir = ".uv-cache"
+link-mode = "copy"

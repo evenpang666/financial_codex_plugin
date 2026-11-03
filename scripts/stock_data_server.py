@@ -34,7 +34,7 @@ from data_diagnostics import readable_issues
 try:
     import akshare as ak
 except ImportError as exc:  # pragma: no cover
-    raise SystemExit("Missing dependency. Activate .venv and run: pip install -r requirements.txt") from exc
+    raise SystemExit("Missing dependency. Run npm run setup in the plugin directory (uses local uv).") from exc
 
 
 HOST, PORT = "127.0.0.1", 8765

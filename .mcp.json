@@ -3,7 +3,8 @@
     "financial": {
       "type": "stdio",
       "command": "node",
-      "args": ["${PLUGIN_ROOT}/scripts/mcp-server.mjs"]
+      "args": ["${PLUGIN_ROOT}/scripts/mcp-bootstrap.mjs"],
+      "cwd": "${PLUGIN_ROOT}"
     }
   }
 }

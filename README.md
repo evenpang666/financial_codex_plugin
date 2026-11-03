@@ -24,17 +24,24 @@
 
 ## 插件安装
 
-准备 **Node.js ≥ 22.13、Python ≥ 3.10 和 Codex CLI**，在仓库根目录运行：
+支持 **Windows 与 Ubuntu**，准备 **Node.js ≥ 22.13、npm 和本地 uv**。uv 自动准备 Python 3.12，无需手动安装 Python 或激活虚拟环境。
+
+下载或克隆仓库后，在根目录选择安装入口：
+
+| 安装方式 | 命令 | 后续操作 |
+| --- | --- | --- |
+| Codex CLI | `npm run install:cli` | 自动注册 marketplace 并安装，新建聊天启用插件 |
+| Codex App | `npm run install:app` | 将输出目录作为项目打开，在插件列表选择“知衡本地插件”并点击安装 |
+
+CLI 安装需要支持 `codex plugin add` 的 Codex CLI。App 安装准备不依赖 CLI；网页自然语言研究仍需要已登录的 Codex CLI。Ubuntu 可使用 CLI；App 是否可用以官方客户端支持的平台为准，插件不提供 Linux 桌面客户端。
+
+例如，在 Windows PowerShell 或 Ubuntu 终端中执行相同命令：
 
 ```powershell
-npm ci --ignore-scripts
-npm run setup
-npm run pack:plugin
-codex plugin marketplace add ./dist/financial-agent
-codex plugin add financial-agent@zhiheng-local
+npm run install:cli
 ```
 
-安装后新建聊天并启用插件。Codex 会创建独立安装副本，首次使用需在**实际安装目录**运行 `npm run setup`；也可指定已有 Python 环境，见[安装与更新指南](docs/getting-started.md)。
+安装器会准备依赖并生成干净的分发目录。插件缓存副本首次加载时，在后台通过本地 uv 配置自己的 Python 环境；后续启动直接复用。自定义 uv 路径、镜像与离线配置，以及解压 ZIP 安装方式，见[安装与更新指南](docs/getting-started.md)。
 
 ## 快速使用
 

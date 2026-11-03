@@ -22,7 +22,11 @@ npm ci --ignore-scripts
 npm run setup
 ```
 
-若使用 `FINANCE_PYTHON`，确认其指向装有 `requirements.txt` 依赖的解释器。仓库已有 `.venv` 不表示新安装的插件副本也有该环境。
+安装使用本地 uv；确认 `uv --version` 可运行，或设置 `FINANCE_UV` 为其绝对路径。默认环境位于 `.runtime/venvs/finance/`，日志在 `.runtime/workspace.log`；缺失网络、镜像或证书配置时按原始错误修复本机 uv 配置后重试。Ubuntu 报 `libgomp.so.1` 缺失时安装系统包 `libgomp1`。
+
+若使用 `FINANCE_PYTHON`，确认其指向装有 `requirements.txt` 依赖的解释器；安装器只验证这个外部环境，不会自动修改它。仓库已有 `.venv` 不表示新安装的插件副本也有该环境。首次使用需要下载依赖，工具调用若超时，可在后台安装完成后重试；MCP 工具发现不等待 Python 安装。
+
+Windows 若报 DLL 加载失败且提示“文件名或扩展名太长”，请使用更短的安装目录，或通过 `FINANCE_PYTHON` 指定短路径下准备好的环境。部分原生依赖仍受 Windows 路径长度限制。
 
 ## MCP 无法启动
 
@@ -32,10 +36,10 @@ npm run setup
 
 ```powershell
 $pluginRoot = (Get-Location).Path
-codex mcp add financial -- node "$pluginRoot/scripts/mcp-server.mjs"
+codex mcp add financial -- node "$pluginRoot/scripts/mcp-bootstrap.mjs"
 ```
 
-完成后重新加载插件或新建聊天。该方式是路径兼容回退，不需要修改认证文件。
+Ubuntu 可用 `codex mcp add financial -- node "$(pwd)/scripts/mcp-bootstrap.mjs"`。完成后重新加载插件或新建聊天。该方式是路径兼容回退，不需要修改认证文件。恢复正常插件加载后，用 `codex mcp remove financial` 删除手工注册项，避免重复加载。
 
 ## 网页研究或日报复核失败
 
