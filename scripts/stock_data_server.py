@@ -1670,9 +1670,10 @@ def portfolio_quote_batch(holdings: list[dict], market: str) -> dict:
     return quotes
 
 
-def portfolio_quotes_response(market: str = "a"):
+def portfolio_quotes_response(market: str = "a", holdings=None):
     market = normalize_market(market)
-    holdings = [row for row in portfolio_response()["holdings"] if row.get("market", "a") == market]
+    if holdings is None:
+        holdings = [row for row in portfolio_response()["holdings"] if row.get("market", "a") == market]
     try:
         batch = portfolio_quote_batch(holdings, market)
     except Exception:
@@ -1991,8 +1992,10 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         parsed = urlparse(self.path)
         try:
+            from paper_snapshot import paper_snapshot
             handlers = {"/v1/portfolio": save_portfolio, "/v1/portfolio/resolve": resolve_portfolio, "/v1/portfolio/import": import_portfolio,
-                        "/v1/portfolio/update": update_portfolio_holding, "/v1/portfolio/delete": delete_portfolio_holding}
+                        "/v1/portfolio/update": update_portfolio_holding, "/v1/portfolio/delete": delete_portfolio_holding,
+                        "/v1/paper-snapshot": paper_snapshot}
             if parsed.path not in handlers:
                 return self.send_json(404, {"error": "Unknown endpoint"})
             content_length = int(self.headers.get("Content-Length", "0"))

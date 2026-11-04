@@ -24,7 +24,7 @@
     const panel = document.querySelector('#workbenchPanel');
     if (panel) {
       panel.setAttribute('aria-labelledby', training ? 'trainTab' : 'backtestTab');
-      document.querySelector('#runTitle').textContent = training ? '让因子，成为你的模型。' : '验证你的策略';
+      document.querySelector('#runTitle').textContent = training ? '训练模型' : '运行回测';
       document.querySelector('#runDescription').textContent = training ? '选择市场、K线周期和股票池，训练独立的 XGBoost 或 Elastic Net 模型。A股可选沪深300、中证500或自定股票池。' : '选择市场、K线周期、股票池及策略，查看对应周期的净值、回撤与交易明细。';
       document.querySelector('#strategyLabel').textContent = training ? '训练模型' : '策略 / 已训练模型';
       document.querySelector('#startLabel').textContent = training ? '训练开始' : '回测开始';

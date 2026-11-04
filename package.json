@@ -18,7 +18,7 @@
     "install:cli": "node scripts/install.mjs --cli",
     "install:app": "node scripts/install.mjs --app",
     "check": "node scripts/check-plugin.mjs",
-    "test": "node --test tests/codex-*.test.mjs tests/web-server.test.mjs tests/web-network.test.mjs tests/web-portfolio.test.mjs tests/test_report_visuals.cjs tests/test_portfolio_tool.mjs",
+    "test": "node --test tests/codex-*.test.mjs tests/web-server.test.mjs tests/web-network.test.mjs tests/web-portfolio.test.mjs tests/web-simulation.test.mjs tests/test_report_visuals.cjs tests/test_portfolio_tool.mjs",
     "test:python": "node scripts/run-python-tests.mjs",
     "pack:plugin": "node scripts/package-plugin.mjs"
   },

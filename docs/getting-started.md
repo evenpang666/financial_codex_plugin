@@ -115,7 +115,7 @@ Windows 可双击 `start.bat`；Ubuntu 可运行 `sh start.sh`。这些入口会
 | `FINANCE_CODEX_MODEL` | 网页研究模型，默认 `gpt-6-sol` |
 | `FINANCE_PORT` | 首选网页端口，默认 `3205` |
 | `FINANCE_WEB_AUTOSTART` | 设为 `0` 时关闭 MCP 加载时的网页自动启动 |
-| `FINANCE_LAN` | 设为 `1` 时尝试启用物理以太网访问 |
+| `FINANCE_LAN` | 默认自动识别物理以太网 IPv4 并启用局域网入口；设为 `0` 时仅限本机 |
 | `SEC_USER_AGENT` | SEC 访问者名称和联系邮箱，不是 API Key |
 
 网页研究通过 `codex exec --sandbox read-only` 使用已有 Codex 登录。插件不需要另配模型 API Key，也不复制认证文件。`--tools-only` 模式仅提供研究工具，不自动启动网页。

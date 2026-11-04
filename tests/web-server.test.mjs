@@ -45,6 +45,20 @@ test('home and report subpage route separately, retaining query strings', async 
   const { base } = await fixture(t); assert.match(await (await fetch(base)).text(), /知衡/);
   const data = await (await fetch(base + '/reports?report=2026-10-16-a-morning')).json(); assert.equal(data.path, '/index.html?report=2026-10-16-a-morning');
 });
+test('strategy guide serves every current strategy with its signal and suitable conditions', async t => {
+  const {base,root}=await fixture(t);
+  for (const file of ['strategy-guide.html','strategy-guide.css']) await writeFile(join(root,'web',file),await readFile(new URL('../web/'+file,import.meta.url)));
+  const response=await fetch(base+'/strategy-guide/'); assert.equal(response.status,200);
+  const html=await response.text();
+  const catalog=await readFile(new URL('../scripts/strategy_catalog.py',import.meta.url),'utf8');
+  const names=[...catalog.matchAll(/^    "([a-z_]+)": \{"name":/gm)].map(match=>match[1]);
+  const cards=[...html.matchAll(/<article class="guide-card" id="([a-z_]+)"/g)].map(match=>match[1]);
+  assert.equal(names.length,10); assert.deepEqual(new Set(cards),new Set(names));
+  assert.equal((html.match(/可考虑的股票情形/g)||[]).length,10);
+  assert.equal((html.match(/要避开的情形/g)||[]).length,10);
+  assert.equal((html.match(/网页默认信号/g)||[]).length,10);
+  assert.equal((await fetch(base+'/strategy-guide.css')).status,200);
+});
 test('LAN URL uses the selected Ethernet address and actual fallback port; hosts and origins stay restricted', async t => {
   const occupied = createServer(); const occupiedPort = await listen(occupied, 0); t.after(() => occupied.close());
   const {base} = await fixture(t, undefined, {network: {adapter: '以太网', address: '192.168.10.42'}, listenHost: '0.0.0.0', preferredPort: occupiedPort});
@@ -76,6 +90,93 @@ test('research completes through Codex backend and retains tool attribution', as
   const response = await fetch(base + '/api/jobs', { method: 'POST', body: JSON.stringify({ kind: 'research', prompt: '核对策略' }) }); assert.equal(response.status, 202);
   const job = await finished(base, (await response.json()).id); assert.equal(job.status, 'completed'); assert.deepEqual(job.result.tools, ['get_strategy_checkpoints']);
   assert.equal((await (await fetch(base + '/api/status')).json()).managedBy, 'codex');
+});
+
+test('deleting completed research persists removal while running jobs and foreign origins are refused', async t => {
+  const {base,root} = await fixture(t, async (_prompt,{signal}) => {
+    await new Promise((resolve,reject) => signal.addEventListener('abort',()=>reject(Error('已取消')),{once:true}));
+  });
+  const running = await (await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'research',prompt:'正在研究'})})).json();
+  assert.equal((await fetch(base+`/api/jobs/${running.id}`,{method:'DELETE'})).status,409);
+  assert.equal((await fetch(base+`/api/jobs/${running.id}`,{method:'DELETE',headers:{Origin:'https://evil.example'}})).status,403);
+  await fetch(base+`/api/jobs/${running.id}/cancel`,{method:'POST'}); await finished(base,running.id);
+  assert.equal((await fetch(base+`/api/jobs/${running.id}`,{method:'DELETE'})).status,200);
+  assert.deepEqual((await (await fetch(base+'/api/jobs')).json()).jobs,[]);
+  assert.deepEqual(JSON.parse(await readFile(join(root,'data/web/jobs.json'),'utf8')),[]);
+  assert.equal((await fetch(base+`/api/jobs/${running.id}`,{method:'DELETE'})).status,404);
+});
+
+test('simulation page and API copy the saved market positions into a separate persistent ledger', async t => {
+  const snapshots=[];
+  const {base,root}=await fixture(t,undefined,{dataHandler:async(req,res)=>{
+    if(req.url==='/v1/portfolio') {res.end(JSON.stringify({holdings:[{symbol:'600001',shares:100},{market:'hk',symbol:'00700',shares:200}]}));return true;}
+    if(req.url==='/api/bar-strategies?market=a&timeframe=daily') {res.end(JSON.stringify({strategies:{momentum:{name:'日线动量'},macd:{name:'MACD'},'xgboost@unverified':{name:'未验证模型',checkpoint_id:'unverified',validation:{passed:false}}}}));return true;}
+    if(req.url!=='/v1/paper-snapshot') return false;
+    let body='';for await(const chunk of req) body+=chunk;
+    const input=JSON.parse(body);snapshots.push(input);
+    res.end(JSON.stringify({day:'2026-11-04',marketOpen:false,strategyName:'日线动量',quotes:input.symbols.map(symbol=>({symbol,price:10,as_of:new Date().toISOString()}))}));return true;
+  }});
+  for(const file of ['simulation.html','simulation.js','simulation.css']) {
+    await writeFile(join(root,'web',file),await readFile(new URL('../web/'+file,import.meta.url)));
+    assert.equal((await fetch(base+'/'+file)).status,200);
+  }
+  assert.match(await (await fetch(base+'/simulation/')).text(),/当前模拟持仓/);
+  const options={method:'POST',body:JSON.stringify({market:'a',strategy:'momentum',initialCash:100,symbols:['UNRELATED']})};
+  assert.equal((await fetch(base+'/api/simulations',{...options,headers:{Origin:'https://evil.example'}})).status,403);
+  const response=await fetch(base+'/api/simulations',options); assert.equal(response.status,201);
+  const row=await response.json();assert.equal(row.initialEquity,1100);assert.equal(row.positions[0].shares,100);
+  assert.deepEqual(snapshots,[{market:'a',strategy:'momentum',symbols:['600001']}]);
+  assert.equal((await fetch(base+'/api/simulations',options)).status,409);
+  assert.equal((await (await fetch(base+'/api/simulations')).json()).simulations[0].id,row.id);
+  const paused=await (await fetch(base+`/api/simulations/${row.id}/pause`,{method:'POST'})).json(); assert.equal(paused.status,'paused');
+  assert.equal((await fetch(base+`/api/simulations/${row.id}/pause`,{method:'POST'})).status,409);
+  const change = strategy => fetch(base+`/api/simulations/${row.id}/strategy`,{method:'POST',body:JSON.stringify({strategy})});
+  assert.equal((await change('not_a_strategy')).status,400);
+  assert.equal((await change('xgboost@unverified')).status,400);
+  assert.equal((await change('momentum')).status,409);
+  const switched=await change('macd'); assert.equal(switched.status,200);
+  const switchedRow=await switched.json(); assert.equal(switchedRow.strategy,'macd'); assert.equal(switchedRow.strategyName,'MACD');
+  assert.equal(switchedRow.initialEquity,row.initialEquity); assert.deepEqual(switchedRow.positions,row.positions);
+  assert.deepEqual(switchedRow.history,row.history); assert.equal(switchedRow.strategyChanges.length,1);
+  assert.equal((await fetch(base+`/api/simulations/${row.id}/strategy`,{method:'POST',headers:{Origin:'https://evil.example'},body:JSON.stringify({strategy:'momentum'})})).status,403);
+  assert.equal((await (await fetch(base+`/api/simulations/${row.id}/resume`,{method:'POST'})).json()).status,'running');
+  assert.equal((await change('momentum')).status,409);
+  assert.equal(JSON.parse(await readFile(join(root,'data/web/paper-trading.json'),'utf8'))[0].strategy,'macd');
+  assert.deepEqual(await (await fetch(base+`/api/simulations/${row.id}/stop`,{method:'POST'})).json(),{id:row.id,deleted:true});
+  assert.deepEqual(JSON.parse(await readFile(join(root,'data/web/paper-trading.json'),'utf8')),[]);
+  assert.equal((await fetch(base+'/api/simulations/unknown/stop',{method:'POST'})).status,404);
+  const modelResponse=await fetch(base+'/api/simulations',{method:'POST',body:JSON.stringify({market:'a',strategy:'xgboost@active-model'})});
+  assert.equal(modelResponse.status,201);
+  assert.equal((await fetch(base+'/api/bar-models/a/daily/active-model',{method:'DELETE'})).status,409);
+  const modelRow=await modelResponse.json();
+  assert.equal((await fetch(base+`/api/simulations/${modelRow.id}/pause`,{method:'POST'})).status,200);
+  assert.equal((await fetch(base+'/api/bar-models/a/daily/active-model',{method:'DELETE'})).status,409);
+});
+test('AI simulation analyzes each saved holding with Codex, marks a supported strategy, and saves its rationale with the ledger', async t => {
+  let saved=[{market:'a',symbol:'600001',name:'甲',shares:100},{market:'a',symbol:'600002',name:'乙',shares:200}], called=0;
+  const research=async (prompt, options) => {
+    called++; assert.equal(options.purpose,'ai_simulation'); assert.deepEqual(options.allowedTools,[]);
+    assert.match(prompt,/600001/); assert.match(prompt,/600002/); assert.match(prompt,/return20Pct/);
+    return {text:JSON.stringify({strategy:'momentum',summary:'两只股票近期走强。',reason:'动量规则与近期价格变化更匹配。',limits:'仅比较当前可用策略，未证明收益最优。',stocks:saved.map(row=>({symbol:row.symbol,observation:'近 20 根日线呈上涨。',fit:'适合观察动量信号。',risk:'短期波动可能反转。'}))}),provider:'codex',model:'mock-model'};
+  };
+  const {base,root}=await fixture(t,research,{dataHandler:async(req,res)=>{
+    if(req.url==='/v1/portfolio') {res.end(JSON.stringify({holdings:saved}));return true;}
+    if(req.url==='/api/bar-strategies?market=a&timeframe=daily') {res.end(JSON.stringify({strategies:{momentum:{name:'日线动量'},macd:{name:'MACD'}}}));return true;}
+    if(req.url==='/v1/portfolio-quotes?market=a') {res.end(JSON.stringify({quotes:saved.map(row=>({symbol:row.symbol,price:10,as_of:new Date().toISOString()}))}));return true;}
+    if(req.url.startsWith('/v1/portfolio-history?')) {const symbol=new URL(req.url,'http://localhost').searchParams.get('symbol');res.end(JSON.stringify({as_of:'2026-11-03',source:'test',points:Array.from({length:30},(_,i)=>({date:`2026-10-${String(i+1).padStart(2,'0')}`,open:10+i/10,high:11+i/10,low:9+i/10,close:10+i/10,volume:1000}))}));return true;}
+    if(req.url==='/v1/paper-snapshot') {let data='';for await(const chunk of req)data+=chunk;const input=JSON.parse(data);res.end(JSON.stringify({day:'2026-11-04',marketOpen:false,strategyName:'日线动量',quotes:input.symbols.map(symbol=>({symbol,price:10,as_of:new Date().toISOString()}))}));return true;}
+    return false;
+  }});
+  const jobResponse=await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'ai_simulation',market:'a'})});assert.equal(jobResponse.status,202);
+  const job=await finished(base,(await jobResponse.json()).id);assert.equal(job.status,'completed');assert.equal(called,1);
+  assert.equal(job.result.recommendation.strategy,'momentum');assert.equal(job.result.recommendation.stocks.length,2);
+  assert.equal((await fetch(base+'/api/simulations',{method:'POST',body:JSON.stringify({market:'a',strategy:'macd',recommendationJobId:job.id})})).status,409);
+  saved=[...saved,{market:'a',symbol:'600003',name:'丙',shares:100}];
+  assert.equal((await fetch(base+'/api/simulations',{method:'POST',body:JSON.stringify({market:'a',strategy:'momentum',recommendationJobId:job.id})})).status,409);
+  saved=saved.slice(0,2);
+  const response=await fetch(base+'/api/simulations',{method:'POST',body:JSON.stringify({market:'a',strategy:'momentum',recommendationJobId:job.id})});assert.equal(response.status,201);
+  const simulation=await response.json();assert.equal(simulation.aiRecommendation.stocks.length,2);
+  assert.equal(JSON.parse(await readFile(join(root,'data/web/paper-trading.json'),'utf8'))[0].aiRecommendation.strategy,'momentum');
 });
 test('strategy task settings remain inspectable without retaining unrelated request fields', async t => {
   const { base } = await fixture(t);
@@ -165,8 +266,8 @@ test('holding pool tasks resolve a market-specific server snapshot and ignore su
 });
 
 test('all workspace pages share navigation order and identify their current page', async () => {
-  const expected = [{href:'/',label:'研究'},{href:'/reports',label:'日报'},{href:'/portfolio',label:'持仓'},{href:'/backtests',label:'回测'}];
-  for (const [file, current] of [['home.html','/'],['index.html','/reports'],['portfolio.html','/portfolio'],['backtests.html','/backtests']]) {
+  const expected = [{href:'/',label:'研究'},{href:'/reports',label:'日报'},{href:'/portfolio',label:'持仓'},{href:'/backtests',label:'回测'},{href:'/simulation',label:'模拟'},{href:'/strategy-guide',label:'策略解读'}];
+  for (const [file, current] of [['home.html','/'],['index.html','/reports'],['portfolio.html','/portfolio'],['backtests.html','/backtests'],['simulation.html','/simulation'],['strategy-guide.html','/strategy-guide']]) {
     const html = await readFile(new URL('../web/' + file, import.meta.url), 'utf8');
     const navigation = html.match(/<nav class="workspace-navigation" aria-label="工作台导航">([\s\S]*?)<\/nav>/)?.[1];
     assert.ok(navigation, `${file} has the shared workspace navigation`);

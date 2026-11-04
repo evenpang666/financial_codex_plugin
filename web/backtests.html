@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="训练 XGBoost 与 Elastic Net 因子模型，比较策略回测结果、净值与模拟交易明细">
-  <title>策略与因子实验室 · 知衡</title>
+  <title>策略回测 · 知衡</title>
   <link rel="stylesheet" href="/styles.css">
   <link rel="stylesheet" href="/soft-ui.css">
   <link rel="stylesheet" href="/dark-ui.css">
@@ -14,15 +14,14 @@
   <div class="ambient ambient-one" aria-hidden="true"></div>
   <div class="ambient ambient-two" aria-hidden="true"></div>
   <header class="topbar">
-    <a class="brand" href="/" aria-label="返回知衡研究首页"><span>知衡 · 策略实验室</span></a>
-    <div class="topbar-meta"><nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio">持仓</a><a href="/backtests" aria-current="page">回测</a></nav><span class="live-dot" aria-hidden="true"></span><span id="connectionState">正在连接</span></div>
+    <a class="brand" href="/" aria-label="返回研究主页"><span>知衡 · 策略回测</span></a>
+    <div class="topbar-meta"><nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio">持仓</a><a href="/backtests" aria-current="page">回测</a><a href="/simulation">模拟</a><a href="/strategy-guide">策略解读</a></nav><span class="live-dot" aria-hidden="true"></span><span id="connectionState">正在连接</span></div>
   </header>
   <main class="report-page backtest-page">
     <section id="pageTop" class="intro" aria-labelledby="pageTitle">
-      <p class="eyebrow">STRATEGY & FACTOR LAB</p>
       <div class="intro-heading">
-        <div><h1 id="pageTitle">策略与因子实验室</h1><p>训练自己的因子模型，再用独立区间验证策略表现。</p></div>
-        <div class="actions"><button id="refreshButton" type="button">刷新结果</button></div>
+        <div><h1 id="pageTitle">策略回测</h1><p>设置策略、股票池与区间，查看回测结果或训练模型。</p></div>
+        <div class="actions"><a class="topbar-link" href="/strategy-guide">查看策略解读 ↗</a><button id="refreshButton" type="button">刷新结果</button></div>
       </div>
     </section>
     <aside id="lanAccess" class="lan-access" aria-label="局域网访问" aria-live="polite">正在获取局域网访问地址…</aside>
@@ -32,7 +31,7 @@
         <button id="trainTab" type="button" role="tab" data-mode="train" aria-selected="false" aria-controls="workbenchPanel" tabindex="-1">训练因子模型</button>
       </div>
       <div id="workbenchPanel" role="tabpanel" aria-labelledby="backtestTab">
-        <h2 id="runTitle">验证你的策略</h2><p id="runDescription">选择经典策略或已训练模型，查看净值、回撤与交易明细。缺少历史数据时自动下载并验收。</p>
+        <h2 id="runTitle">运行回测</h2><p id="runDescription">选择策略或模型，查看净值、回撤与交易明细。缺少历史数据时会自动下载。</p>
         <form id="taskForm" data-kind="backtest" class="task-fields">
           <input type="hidden" name="action" value="backtest">
           <label>市场<select name="market"><option value="a">A股</option><option value="hk">港股</option><option value="us">美股</option></select></label>

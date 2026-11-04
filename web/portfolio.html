@@ -14,12 +14,11 @@
 <body>
   <header class="topbar">
     <a class="brand" href="/">知衡 · 持仓工作台</a>
-    <nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio" aria-current="page">持仓</a><a href="/backtests">回测</a></nav>
+    <nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio" aria-current="page">持仓</a><a href="/backtests">回测</a><a href="/simulation">模拟</a><a href="/strategy-guide">策略解读</a></nav>
   </header>
   <main class="report-page portfolio-page">
     <section class="intro" aria-labelledby="pageTitle">
-      <p class="eyebrow">MY PORTFOLIO</p>
-      <div class="intro-heading"><div><h1 id="pageTitle">我的持仓</h1><p>查看仓内股票，从当前持仓池出发分析与验证策略。</p></div><div class="actions"><button id="portfolioEntryOpen" type="button">添加 / 管理持仓</button><button id="portfolioRefresh" type="button">刷新持仓</button></div></div>
+      <div class="intro-heading"><div><h1 id="pageTitle">持仓</h1><p>查看和编辑持仓，并以当前持仓池进行分析、回测或部署。</p></div><div class="actions"><button id="portfolioEntryOpen" type="button">添加 / 管理持仓</button><button id="portfolioRefresh" type="button">刷新持仓</button></div></div>
     </section>
     <section class="insight-card" aria-labelledby="holdingsTitle">
       <div class="section-heading"><div><p class="eyebrow">CURRENT HOLDINGS</p><h2 id="holdingsTitle">仓内股票</h2><p id="holdingsMeta" class="insight-meta" role="status">正在读取已保存持仓…</p></div><label class="select-control" for="holdingsMarket"><span>当前市场</span><select id="holdingsMarket"><option value="a">A股 · CNY</option><option value="hk">港股 · HKD</option><option value="us">美股 · USD</option></select></label></div>

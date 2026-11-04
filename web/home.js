@@ -25,7 +25,7 @@ async function refresh() {
     const { jobs } = await api('/api/jobs'); failures = 0;
     $('#researchSubmit').disabled = jobs.some(job => job.status === 'running');
     const signature = JSON.stringify(jobs); if (lastJobs === signature) return; lastJobs = signature;
-    if (!jobs.length) return;
+    if (!jobs.length) { $('#jobList').replaceChildren(node('p', 'empty-state', '暂无研究记录，开始研究后会保存在这里。')); return; }
     $('#jobList').replaceChildren(...jobs.map(job => {
       const card = node('article', 'job-card'), heading = node('div', 'job-heading'), title = node('div');
       title.append(node('h3', '', job.title)); const time = node('time', '', new Date(job.createdAt).toLocaleString('zh-CN')); time.dateTime = job.createdAt; title.append(time); heading.append(title);
@@ -33,6 +33,16 @@ async function refresh() {
       if (job.status === 'running') {
         status.prepend(node('span', 'spinner')); const cancel = node('button', 'quiet', '取消'); cancel.type = 'button';
         cancel.addEventListener('click', async () => { try { await api(`/api/jobs/${job.id}/cancel`, { method: 'POST' }); cancel.disabled = true; } catch (e) { $('#notice').textContent = e.message; } }); status.append(cancel);
+      }
+      else {
+        const remove = node('button', 'quiet', '删除记录'); remove.type = 'button';
+        remove.setAttribute('aria-label', `删除研究记录：${job.title}`);
+        remove.addEventListener('click', async () => {
+          if (!window.confirm(`删除“${job.title}”这条研究记录？已归档的日报会保留。`)) return;
+          remove.disabled = true;
+          try { await api(`/api/jobs/${job.id}`, {method: 'DELETE'}); lastJobs = ''; await refresh(); }
+          catch (error) { $('#notice').textContent = error.message; remove.disabled = false; }
+        }); status.append(remove);
       }
       heading.append(status); card.append(heading);
       if (job.result?.text || job.error) card.append(answer(job.error || job.result.text, Boolean(job.error)));
