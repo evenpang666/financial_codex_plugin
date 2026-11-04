@@ -289,11 +289,13 @@ test('holding pool tasks resolve a market-specific server snapshot and ignore su
 });
 
 test('all workspace pages share navigation order and identify their current page', async () => {
-  const expected = [{href:'/',label:'研究'},{href:'/reports',label:'日报'},{href:'/portfolio',label:'持仓'},{href:'/backtests',label:'回测'},{href:'/simulation',label:'模拟'},{href:'/strategy-guide',label:'策略解读'}];
-  for (const [file, current] of [['home.html','/'],['index.html','/reports'],['portfolio.html','/portfolio'],['backtests.html','/backtests'],['simulation.html','/simulation'],['strategy-guide.html','/strategy-guide']]) {
+  const expected = [{href:'/',label:'研究'},{href:'/reports',label:'日报'},{href:'/portfolio',label:'持仓'},{href:'/backtests',label:'回测'},{href:'/simulation',label:'模拟'},{href:'/strategy-guide',label:'策略解读'},{href:'/settings',label:'设置'}];
+  for (const [file, current] of [['home.html','/'],['index.html','/reports'],['portfolio.html','/portfolio'],['backtests.html','/backtests'],['simulation.html','/simulation'],['strategy-guide.html','/strategy-guide'],['settings.html','/settings']]) {
     const html = await readFile(new URL('../web/' + file, import.meta.url), 'utf8');
     const navigation = html.match(/<nav class="workspace-navigation" aria-label="工作台导航">([\s\S]*?)<\/nav>/)?.[1];
     assert.ok(navigation, `${file} has the shared workspace navigation`);
+    assert.match(html, /src="\/theme.js"/);
+    assert.match(html, /href="\/theme.css"/);
     const links = [...navigation.matchAll(/<a href="([^"]+)"([^>]*)>([^<]+)<\/a>/g)];
     assert.deepEqual(links.map(match=>({href:match[1],label:match[3]})),expected,file);
     assert.deepEqual(links.filter(match=>match[2].includes('aria-current="page"')).map(match=>match[1]),[current],file);

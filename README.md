@@ -5,7 +5,7 @@
 <p align="center">让研究更从容，让判断有依据。</p>
 <p align="center">面向 Codex 的本地金融研究插件 · A 股 / 港股 / 美股</p>
 <p align="center">
-  <a href="#功能特色">功能特色</a> · <a href="#插件安装">插件安装</a> · <a href="#快速使用">快速使用</a> · <a href="#问题解决">问题解决</a> · <a href="docs/README.md">完整文档</a>
+  <a href="#功能特色">功能特色</a> · <a href="#插件安装">插件安装</a> · <a href="#插件更新">插件更新</a> · <a href="#快速使用">快速使用</a> · <a href="#问题解决">问题解决</a> · <a href="docs/README.md">完整文档</a>
 </p>
 
 ## 功能特色
@@ -50,6 +50,38 @@ npm run install:cli
 
 分发 ZIP 使用可迁移的启动配置，首次启动时由 Node 解析安装目录并写回绝对路径；不会包含打包机器的个人路径。移动目录或更改 `CODEX_HOME` 后，应重新运行安装或修复命令。
 
+## 插件更新
+
+更新需要获取新代码、重新安装插件并重启服务。已安装插件运行的是缓存副本，仅更新源码或刷新浏览器不会替换正在运行的旧代码。
+
+**1. 停止服务并备份数据。** 在仓库根目录执行：
+
+```text
+npm stop -- --all
+```
+
+Windows 也可双击 `stop.bat`，Ubuntu 可执行 `sh stop.sh`。关闭使用知衡的 Codex 会话，避免更新期间再次启动服务。将**实际运行副本**中的 `data/`、`config/` 备份到仓库、分发目录和插件缓存之外的位置；其中包含持仓、日报、回测与个人配置。默认插件安装目录为 `~/.codex/plugins/cache/zhiheng-local/financial-agent/<版本>/`，Windows 的 `~` 对应用户目录；自定义 `CODEX_HOME` 时以该目录为准。源码、`dist/financial-agent` 与插件缓存的数据各自独立，请备份实际使用的那一份。**卸载会删除插件缓存，重新打包会替换分发目录，必须先完成备份。**
+
+**2. 获取最新代码。** Git 安装用户在仓库根目录执行：
+
+```text
+git status
+git pull --ff-only
+```
+
+有本地修改时先提交或妥善保存；拉取失败时处理修改或分支分歧后再继续。ZIP 用户下载并解压新版到独立目录，按[分发 ZIP 安装说明](docs/getting-started.md#使用分发-zip)重新安装，同样需要先备份旧副本数据。
+
+**3. 按原安装方式重新安装。** Git 安装用户选择下列一种方式：
+
+| 安装方式 | 更新操作 |
+| --- | --- |
+| Codex CLI | 备份完成后执行 `codex plugin remove financial-agent@zhiheng-local`，再执行 `npm run install:cli`，确保同版本代码变更也重新复制到缓存 |
+| Codex App | 执行 `npm run install:app`，在 App 中打开输出的 `dist/financial-agent` 目录，刷新本地插件列表，卸载旧的“知衡 Financial Agent”后重新安装 |
+
+安装准备和 Codex 客户端应使用同一个 `CODEX_HOME`。`npm run repair:mcp` 只修复启动配置；更新插件代码仍需完成重新安装。
+
+**4. 恢复数据并验证。** 如果安装后服务已自动启动，先再次执行 `npm stop -- --all`，再将备份的 `data/`、`config/` 恢复到新版本的实际安装目录。重启 Codex App 或 CLI 会话，新建聊天并启用知衡，打开工作台，核对持仓、历史日报及回测记录。首次启动可能需要重新准备 Python 环境。
+
 ## 快速使用
 
 在 Codex 中直接提出研究需求：
@@ -68,6 +100,8 @@ npm start
 ```
 
 打开[研究工作台](http://127.0.0.1:3205)、[日报](http://127.0.0.1:3205/reports)、[我的持仓](http://127.0.0.1:3205/portfolio)或[策略实验室](http://127.0.0.1:3205/backtests)。端口占用时，以启动输出或插件返回的地址为准。
+
+在导航栏进入[设置](http://127.0.0.1:3205/settings)，可选择 Codex 模型和推理强度，默认 **GPT-6 Sol · 高**。模型设置保存在当前运行副本的 `data/web/settings.json`，重启后保留，并用于后续研究、日报复核、持仓识别与 AI 策略分析。首次可通过 `FINANCE_CODEX_MODEL` 和 `FINANCE_CODEX_REASONING_EFFORT` 指定初始配置；保存的网页设置优先。主题默认深色，可切换浅色，立即生效并保存在当前浏览器中。
 
 手动停止与清理：Windows 双击根目录的 `stop.bat`；Ubuntu 执行 `sh stop.sh`。脚本会检查当前源码、`dist/financial-agent` 和 Codex 插件缓存中的知衡副本，核实服务身份后停止服务，Windows 同时终止其子进程，并清理失效的运行状态与启动锁。报告、持仓、回测、Python 环境与日志均保留。也可运行 `npm stop` 仅清理当前副本，或 `npm stop -- --all` 检查所有上述副本。脚本只需要 Node.js，无需重新安装插件或依赖；已启用的插件在新会话中可能再次启动工作台。
 

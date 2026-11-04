@@ -402,7 +402,7 @@ class ReportHandler(BaseHTTPRequestHandler):
                 asset = "backtests.html"
             else:
                 asset = "index.html" if path in ("/", "/index.html") else path.lstrip("/")
-            if asset not in {"index.html", "styles.css", "app.js", "deployment.js", "report-visuals.js", "backtests.html", "backtests.js", "soft-ui.css", "dark-ui.css", "task-controls.js", "icon.svg"}:
+            if asset not in {"index.html", "styles.css", "app.js", "deployment.js", "report-visuals.js", "backtests.html", "backtests.js", "soft-ui.css", "dark-ui.css", "theme.js", "theme.css", "task-controls.js", "icon.svg"}:
                 return self.send_json(404, {"error": "Not found"})
             target = WEB_ROOT / asset
             content_type = mimetypes.guess_type(target.name)[0] or "application/octet-stream"

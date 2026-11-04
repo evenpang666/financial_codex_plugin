@@ -25,10 +25,21 @@ test('Codex bridge rejects errors and unregistered tool requests instead of publ
   await assert.rejects(agent('research'),/authentication required/);
   await assert.rejects(agent('research',{allowedTools:['unknown']}),/未注册/);
 });
-test('Codex bridge selects gpt-6-sol by default',async()=>{
+test('Codex bridge selects gpt-6-sol with high reasoning by default',async()=>{
   const run=mockProcess([{type:'item.completed',item:{type:'agent_message',text:'完成'}}],0,(_cmd,args)=>{
     assert.equal(args[args.indexOf('--model')+1],'gpt-6-sol');
+    assert.ok(args.includes('model_reasoning_effort="high"'));
   });
   const result=await createResearchAgent(null,process.cwd(),['stock_search'],{},run)('研究AAPL');
   assert.equal(result.model,'gpt-6-sol');
+  assert.equal(result.reasoningEffort,'high');
+});
+test('Codex bridge applies saved model and effort instead of environment defaults', async () => {
+  const run = mockProcess([{type:'item.completed',item:{type:'agent_message',text:'完成'}}], 0, (_cmd, args) => {
+    assert.equal(args[args.indexOf('--model') + 1], 'gpt-6-luna');
+    assert.ok(args.includes('model_reasoning_effort="low"'));
+  });
+  const result = await createResearchAgent(null, process.cwd(), [], {FINANCE_CODEX_MODEL:'gpt-6-sol'}, run)('研究', {model:'gpt-6-luna', reasoningEffort:'low'});
+  assert.equal(result.model, 'gpt-6-luna');
+  assert.equal(result.reasoningEffort, 'low');
 });

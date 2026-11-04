@@ -140,7 +140,11 @@ function render() {
   const values = [['累计收益', `${number(row.profit)} ${currency(row.market)}`], ['累计收益率', pct(row.totalReturn)], ['账户总资产', number(row.equity)], ['可用现金', number(row.cash)], ['累计投入资产', number(row.initialEquity + (row.addedCapital || 0))], ['手续费与滑点', number(row.costs)]];
   $('#simulationMetrics').replaceChildren(...values.map(([label, value], index) => { const item = node('div', ''), strong = node('strong', value); if (index < 2) strong.className = row.profit > 0 ? 'profit-up' : row.profit < 0 ? 'profit-down' : ''; item.append(node('span', label), strong); return item; }));
   curve(row.history);
-  table('#simulationPositions', row.positions.filter(position => position.shares > 0).map(position => [ `${position.name} (${position.symbol})`, number(row.initialPositions.find(initial => initial.symbol === position.symbol)?.shares || 0), number(position.shares), number(position.price), number(position.shares * position.price), row.equity > 0 ? pct(position.shares * position.price / row.equity) : '—', stamp(position.quoteAt)]), '当前无持仓，资产保留为现金。');
+  const initialSymbols = new Set(row.initialPositions.map(position => position.symbol));
+  const visiblePositions = row.positions.filter(position => position.shares > 0 || initialSymbols.has(position.symbol));
+  const heldCount = row.positions.filter(position => position.shares > 0).length;
+  $('#simulationHoldingsExplanation').textContent = heldCount ? '模拟仓位与持仓页分别记录；已卖出的初始股票仍列在下表，当前股数为 0。' : `本次模拟已清仓，${row.initialPositions.length} 只初始股票的模拟股数均为 0，${number(row.cash)} ${currency(row.market)} 保留为现金。持仓页的原始仓位没有变化；要重新复制，请${row.status === 'running' ? '先暂停，再' : ''}新建模拟。`;
+  table('#simulationPositions', visiblePositions.map(position => [ `${position.name} (${position.symbol})`, number(row.initialPositions.find(initial => initial.symbol === position.symbol)?.shares || 0), number(position.shares), number(position.price), number(position.shares * position.price), row.equity > 0 ? pct(position.shares * position.price / row.equity) : '—', stamp(position.quoteAt)]), '暂无股票记录。');
   table('#simulationTrades', [...row.trades].reverse().map(trade => [stamp(trade.at), trade.symbol, trade.side === 'buy' ? '买入' : '卖出', number(trade.shares), number(trade.price), number(trade.fee), trade.signalDay]), '尚无模拟成交；休市、信号未触发或行情过期时会保留仓位。');
   controls();
 }
