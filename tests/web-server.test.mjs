@@ -125,7 +125,7 @@ test('simulation page and API copy the saved market positions into a separate pe
   assert.equal((await fetch(base+'/api/simulations',{...options,headers:{Origin:'https://evil.example'}})).status,403);
   const response=await fetch(base+'/api/simulations',options); assert.equal(response.status,201);
   const row=await response.json();assert.equal(row.initialEquity,1100);assert.equal(row.positions[0].shares,100);
-  assert.deepEqual(snapshots,[{market:'a',strategy:'momentum',symbols:['600001']}]);
+  assert.deepEqual(snapshots,[{market:'a',strategy:'momentum',symbols:['600001'],requiredSymbols:['600001']}]);
   assert.equal((await fetch(base+'/api/simulations',options)).status,409);
   assert.equal((await (await fetch(base+'/api/simulations')).json()).simulations[0].id,row.id);
   const paused=await (await fetch(base+`/api/simulations/${row.id}/pause`,{method:'POST'})).json(); assert.equal(paused.status,'paused');
@@ -164,6 +164,7 @@ test('simulation API accepts new-stock opt-in and cash contribution on resume', 
   assert.equal(startedResponse.status,201);
   const started=await startedResponse.json();
   assert.equal(started.allowNewStocks,true);assert.deepEqual(snapshots[0].symbols,['600001','600002']);
+  assert.deepEqual(snapshots[0].requiredSymbols,['600001']);
   assert.equal(started.initialEquity,1000);
   await fetch(base+`/api/simulations/${started.id}/pause`,{method:'POST'});
   assert.equal((await fetch(base+`/api/simulations/${started.id}/resume`,{method:'POST',body:JSON.stringify({addedCash:-1})})).status,400);

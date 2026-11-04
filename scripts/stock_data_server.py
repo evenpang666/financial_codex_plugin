@@ -1037,7 +1037,7 @@ def history(symbol: str, start: str = "", end: str = "", adjust: str = "qfq", ma
         except Exception as primary_error:
             if symbol.startswith(("4", "8")):
                 raise primary_error
-            exchange_symbol = ("sh" if symbol.startswith(("5", "6", "9")) else "sz") + symbol
+            exchange_symbol = ("bj" if symbol.startswith("92") else "sh" if symbol.startswith(("5", "6", "9")) else "sz") + symbol
             # Sina's native JS runtime can abort the process when initialized by
             # several holding-chart requests concurrently. Keep this fallback serial.
             with HISTORY_SINA_LOCK:

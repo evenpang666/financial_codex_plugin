@@ -46,6 +46,17 @@ test('older quotes cannot overwrite a newer portfolio valuation', () => {
   assert.equal(row.equity,20000);
 });
 
+test('missing history for a zero-position candidate is shown without blocking held-stock rebalance', () => {
+  const row = {market:'a',initialEquity:10000,cash:0,costs:0,allowNewStocks:true,
+    initialPositions:[{symbol:'600001',shares:1000}],positions:[{symbol:'600001',shares:1000,price:10},{symbol:'920167',shares:0,price:0}],trades:[],history:[]};
+  const result = advanceSimulation(row,{day:'2026-11-04',marketOpen:true,
+    quotes:[{symbol:'600001',price:10,as_of:now.toISOString()}],
+    signals:{asOf:'2026-11-03',topN:1,rows:[{symbol:'600001',score:1,entry:true}],skipped:[{symbol:'920167',reason:'历史行情缺失'}]}},now);
+  assert.equal(result.rebalancedDay,'2026-11-04');
+  assert.deepEqual(result.skippedCandidates,[{symbol:'920167',reason:'历史行情缺失'}]);
+  assert.match(result.note,/跳过 1 只缺少日线信号的候选股/);
+});
+
 test('opted-in candidate stocks can enter, while later cash deposits do not count as profit', async t => {
   await mkdir('.test-tmp', {recursive:true}); const directory = await mkdtemp(join(process.cwd(),'.test-tmp/paper-candidates-'));
   let candidateCalls = 0;
