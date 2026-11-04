@@ -26,7 +26,8 @@ class PluginPackageTests(unittest.TestCase):
             (root / '.codex-plugin').mkdir()
             (root / '.codex-plugin/plugin.json').write_text(json.dumps({'name': 'financial-agent', 'version': '2.3.4'}))
             names = ['.mcp.json', '.env.example', 'package.json', 'package-lock.json',
-                     'requirements.txt', 'uv.toml', 'README.md', 'LICENSE', 'start.bat', 'start.sh']
+                     'requirements.txt', 'uv.toml', 'README.md', 'LICENSE', 'start.bat', 'start.sh',
+                     'stop.bat', 'stop.sh']
             for name in names:
                 (root / name).write_text('fixture', encoding='utf-8')
             (root / 'marketplace.example.json').write_text('{"name":"test"}')
@@ -46,6 +47,8 @@ class PluginPackageTests(unittest.TestCase):
                 self.assertIsNone(archive.testzip())
                 paths = archive.namelist()
                 self.assertIn('uv.toml', paths)
+                self.assertIn('stop.bat', paths)
+                self.assertIn('stop.sh', paths)
                 self.assertIn('.agents/plugins/marketplace.json', paths)
                 config = json.loads(archive.read('.mcp.json'))['mcpServers']['financial']
                 self.assertNotIn('cwd', config)

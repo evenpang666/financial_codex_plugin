@@ -12,7 +12,7 @@ output=ROOT/'dist';output.mkdir(exist_ok=True)
 version=json.loads((ROOT/'.codex-plugin/plugin.json').read_text(encoding='utf-8'))['version']
 target=output/f'financial-agent-{version}.zip'
 folders=['.codex-plugin','lib','engine','scripts','skills','web','tests','data-corrections','node_modules']
-files=[ROOT/name for name in ['marketplace.example.json','.env.example','package.json','package-lock.json','requirements.txt','uv.toml','README.md','LICENSE','start.bat','start.sh']]
+files=[ROOT/name for name in ['marketplace.example.json','.env.example','package.json','package-lock.json','requirements.txt','uv.toml','README.md','LICENSE','start.bat','start.sh','stop.bat','stop.sh']]
 for folder in folders:
     files.extend(p for p in (ROOT/folder).rglob('*') if p.is_file() and '__pycache__' not in p.parts and p.suffix not in ('.pyc','.log','.tmp'))
 files.extend((ROOT/'config').glob('*.example.*'))

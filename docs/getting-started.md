@@ -100,7 +100,8 @@ npm run setup
 - 同一安装目录中的多个聊天与手动启动共用一个服务。关闭聊天后，自动创建的后台服务继续运行。
 - `npm start`：启动或复用当前目录的工作台并打开浏览器。
 - `npm run dev`：启动或复用工作台，不打开浏览器。
-- `npm stop`：停止当前运行副本的工作台。
+- `npm stop`：核实身份后停止当前副本的工作台，清理失效的运行状态与启动锁；Windows 同时终止子进程。
+- Windows 双击 `stop.bat`，Ubuntu 执行 `sh stop.sh`，或运行 `npm stop -- --all`：同时检查源码、`dist/financial-agent` 与 Codex 插件缓存中的运行副本。只需 Node.js；保留研究数据、Python 环境与日志。插件若仍启用，新会话可能再次启动服务。
 
 Windows 可双击 `start.bat`；Ubuntu 可运行 `sh start.sh`。这些入口会在 Node 依赖缺失时安装依赖；Python 环境由运行时用 uv 自动准备，已有环境直接复用。
 
