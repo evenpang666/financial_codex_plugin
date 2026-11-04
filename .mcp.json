@@ -2,9 +2,11 @@
   "mcpServers": {
     "financial": {
       "type": "stdio",
-      "command": "node",
-      "args": ["${PLUGIN_ROOT}/scripts/mcp-bootstrap.mjs"],
-      "cwd": "${PLUGIN_ROOT}"
+      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "args": [
+        "C:\\Users\\15261\\Documents\\GitHub\\financial_agent_codex\\scripts\\mcp-bootstrap.mjs"
+      ],
+      "cwd": "C:\\Users\\15261\\Documents\\GitHub\\financial_agent_codex"
     }
   }
 }

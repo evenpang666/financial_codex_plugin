@@ -5,6 +5,7 @@ import { join, dirname } from 'node:path';
 import { spawn } from 'node:child_process';
 import { ensurePython, ensureNodeDependencies, uvPath, uvEnvironment, withSetupLock } from '../lib/setup.mjs';
 import { pythonPath } from '../lib/workers.mjs';
+import { absoluteMcpConfig, installedRoot, portableMcpConfig, writeMcpConfig } from '../lib/mcp-config.mjs';
 
 async function fixture(t) {
   await mkdir('.test-tmp', {recursive: true});
@@ -126,21 +127,78 @@ test('CLI installer runs marketplace/add in order; App preparation requires no C
   await mkdir(join(root, 'lib'));
   await cp('scripts/install.mjs', join(root, 'scripts/install.mjs'));
   await cp('lib/setup.mjs', join(root, 'lib/setup.mjs'));
+  await cp('lib/mcp-config.mjs', join(root, 'lib/mcp-config.mjs'));
+  await mkdir(join(root, '.codex-plugin'));
+  await writeFile(join(root, '.codex-plugin/plugin.json'), JSON.stringify({name: 'financial-agent', version: '1.2.3'}));
+  await writeFile(join(root, 'marketplace.example.json'), JSON.stringify({name: 'zhiheng-local'}));
+  await writeFile(join(root, 'scripts/mcp-bootstrap.mjs'), '// fixture');
   // Stand-in package builder and Codex CLI keep this integration isolated from user configuration.
-  await writeFile(join(root, 'scripts/package_plugin.py'), 'from pathlib import Path\nPath("dist/financial-agent").mkdir(parents=True, exist_ok=True)\n');
-  await writeFile(join(root, 'plugin'), `import {appendFileSync} from 'node:fs'; appendFileSync('codex-calls.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n');`);
+  await writeFile(join(root, 'scripts/package_plugin.py'), 'from pathlib import Path\nimport shutil\np=Path("dist/financial-agent")\np.mkdir(parents=True, exist_ok=True)\nfor name in ["scripts", ".codex-plugin"]:\n shutil.copytree(name,p/name,dirs_exist_ok=True)\nshutil.copyfile("marketplace.example.json",p/"marketplace.example.json")\n');
+  await writeFile(join(root, 'plugin'), `import {appendFileSync} from 'node:fs'; import {resolve} from 'node:path'; appendFileSync('codex-calls.jsonl', JSON.stringify(process.argv.slice(2)) + '\\n'); if(process.argv.includes('--json')) console.log(JSON.stringify({installedPath:resolve('dist/financial-agent')}));`);
   for (const name of ['@modelcontextprotocol/sdk', 'ajv']) {
     const directory = join(root, 'node_modules', name);
     await mkdir(directory, {recursive: true}); await writeFile(join(directory, 'package.json'), '{}');
   }
-  const env = {...process.env, FINANCE_CODEX_BIN: process.execPath, FINANCE_PYTHON: pythonPath(process.cwd())};
+  const env = {...process.env, FINANCE_CODEX_BIN: process.execPath, FINANCE_PYTHON: pythonPath(process.cwd()), CODEX_HOME: join(root, 'codex')};
   const cli = await command(root, env, ['scripts/install.mjs', '--cli']);
   assert.equal(cli.code, 0, cli.stderr);
   const calls = (await readFile(join(root, 'codex-calls.jsonl'), 'utf8')).trim().split('\n').map(JSON.parse);
-  assert.deepEqual(calls, [['add', '--help'], ['marketplace', 'add', join(root, 'dist/financial-agent')], ['add', 'financial-agent@zhiheng-local']]);
+  assert.deepEqual(calls, [['add', '--help'], ['marketplace', 'add', join(root, 'dist/financial-agent')], ['add', 'financial-agent@zhiheng-local', '--json']]);
+  assert.equal(JSON.parse(await readFile(join(root, 'dist/financial-agent/.mcp.json'), 'utf8')).mcpServers.financial.cwd, join(root, 'dist/financial-agent'));
   env.FINANCE_CODEX_BIN = join(root, 'does-not-exist.exe');
   const app = await command(root, env, ['scripts/install.mjs', '--app']);
   assert.equal(app.code, 0, app.stderr);
   assert.match(app.stdout, /Codex App/);
+  assert.equal(JSON.parse(await readFile(join(root, 'dist/financial-agent/.mcp.json'), 'utf8')).mcpServers.financial.cwd,
+    installedRoot({marketplace:'zhiheng-local', name:'financial-agent', version:'1.2.3'}, env));
   assert.equal((await readFile(join(root, 'codex-calls.jsonl'), 'utf8')).trim().split('\n').length, 3);
+});
+
+async function pluginFixture(t) {
+  const root = await fixture(t);
+  await mkdir(join(root, '.codex-plugin'));
+  await mkdir(join(root, 'scripts'));
+  const metadata = {name: 'financial-agent', version: '1.2.3', marketplace: 'zhiheng-local'};
+  await writeFile(join(root, '.codex-plugin/plugin.json'), JSON.stringify(metadata));
+  await writeFile(join(root, 'marketplace.example.json'), JSON.stringify({name: metadata.marketplace}));
+  await writeFile(join(root, 'scripts/mcp-bootstrap.mjs'), 'console.log(JSON.stringify({cwd:process.cwd(),file:import.meta.url}));');
+  return {root, metadata};
+}
+
+test('MCP repair writes real absolute paths, backs up original bytes, preserves unrelated settings and is idempotent', async t => {
+  const {root} = await pluginFixture(t);
+  const original = JSON.stringify({mcpServers: {other: {command:'keep'}, financial:{type:'stdio',command:'node',args:['${PLUGIN_ROOT}/scripts/mcp-bootstrap.mjs','--tools-only'],cwd:'${PLUGIN_ROOT}',env:{FINANCE_PORT:'3210'}}}});
+  await writeFile(join(root,'.mcp.json'),original);
+  await writeMcpConfig(root);
+  const config = JSON.parse(await readFile(join(root,'.mcp.json'),'utf8'));
+  assert.deepEqual(config.mcpServers.other,{command:'keep'});
+  assert.deepEqual(config.mcpServers.financial.env,{FINANCE_PORT:'3210'});
+  assert.equal(config.mcpServers.financial.command,process.execPath);
+  assert.deepEqual(config.mcpServers.financial.args,[join(root,'scripts/mcp-bootstrap.mjs'),'--tools-only']);
+  assert.equal(config.mcpServers.financial.cwd,root);
+  assert.ok(!JSON.stringify(config).includes('${PLUGIN_ROOT}'));
+  const {readdir} = await import('node:fs/promises');
+  const backups=await readdir(join(root,'.runtime/mcp-backups'));
+  assert.equal(backups.length,1);
+  assert.equal(await readFile(join(root,'.runtime/mcp-backups',backups[0]),'utf8'),original);
+  await writeMcpConfig(root);
+  assert.equal((await readdir(join(root,'.runtime/mcp-backups'))).length,1);
+});
+
+test('portable ZIP launch finds the installed copy from another cwd and persists absolute paths', async t => {
+  const {root,metadata} = await pluginFixture(t);
+  const env = {...process.env,CODEX_HOME:join(root,'用户 cache')};
+  const target=installedRoot(metadata,env);
+  await mkdir(target,{recursive:true});
+  for (const name of ['.codex-plugin','scripts']) await cp(join(root,name),join(target,name),{recursive:true});
+  const portable=portableMcpConfig(metadata);
+  await writeFile(join(target,'.mcp.json'),JSON.stringify(portable));
+  assert.equal(portable.mcpServers.financial.cwd,undefined);
+  assert.ok(!JSON.stringify(portable).includes('${PLUGIN_ROOT}'));
+  assert.ok(!JSON.stringify(portable).includes(root));
+  const launch=await command(process.cwd(),env,portable.mcpServers.financial.args);
+  assert.equal(launch.code,0,launch.stderr);
+  assert.equal(JSON.parse(launch.stdout).cwd,target);
+  const actual=JSON.parse(await readFile(join(target,'.mcp.json'),'utf8'));
+  assert.deepEqual(actual,absoluteMcpConfig(target));
 });

@@ -2,6 +2,7 @@ import { existsSync } from 'node:fs';
 import { delimiter, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureNodeDependencies, ensurePython, run } from '../lib/setup.mjs';
+import { installedRoot, pluginMetadata, writeMcpConfig } from '../lib/mcp-config.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const args = process.argv.slice(2);
@@ -26,12 +27,18 @@ if (args.includes('--help')) {
       catch (error) { throw Error(`Codex CLI 不可用或尚不支持 plugin add。请更新 Codex CLI，或设置 FINANCE_CODEX_BIN。${error.message}`); }
     }
     await ensureNodeDependencies(root);
+    await writeMcpConfig(root);
     const python = await ensurePython(root);
-    await run(python, [join(root, 'scripts/package_plugin.py')], {root, env: {...env, PYTHONUTF8: '1'}});
+    await run(python, [join(root, 'scripts/package_plugin.py')], {root, env: {...env, PYTHONUTF8: '1', FINANCE_NODE: process.execPath}});
     const marketplace = join(root, 'dist/financial-agent');
+    const metadata = await pluginMetadata(marketplace);
+    await writeMcpConfig(marketplace, {launchRoot: installedRoot(metadata, env), backup: false});
     if (args[0] === '--cli') {
       await run(codex, [...prefix, 'plugin', 'marketplace', 'add', marketplace], {root, env});
-      await run(codex, [...prefix, 'plugin', 'add', 'financial-agent@zhiheng-local'], {root, env});
+      const output = await run(codex, [...prefix, 'plugin', 'add', 'financial-agent@zhiheng-local', '--json'], {root, env, capture: true});
+      const result = JSON.parse(output);
+      if (!result.installedPath) throw Error('Codex 未返回实际 installedPath，无法配置 MCP 绝对路径。');
+      await writeMcpConfig(result.installedPath);
       console.log('知衡插件已通过 Codex CLI 安装。请新建聊天并启用插件。');
     } else {
       console.log(`本地 marketplace 已准备：${marketplace}`);

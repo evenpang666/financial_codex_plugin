@@ -30,16 +30,25 @@ Windows 若报 DLL 加载失败且提示“文件名或扩展名太长”，请�
 
 ## MCP 无法启动
 
-确认 Node.js ≥ 22.13 且 `node` 在 Codex 启动环境的 PATH 中。检查实际安装副本是否包含 `node_modules`。
+确认 Node.js ≥ 22.13。1.1.1 安装器会记录实际 Node 可执行文件、启动脚本和工作目录的绝对路径。检查实际安装副本是否包含 `node_modules`。
 
-若错误路径中原样出现 `${PLUGIN_ROOT}`，说明当前客户端未展开插件路径。曾在 Codex CLI 0.166 alpha 遇到此问题，可在实际安装目录注册绝对路径：
+若错误路径中原样出现 `${PLUGIN_ROOT}`，或报 Windows 错误 267“目录名称无效”，说明客户端未展开占位符，MCP 尚未启动，工作台自动启动代码也不会执行。在**更新后的源码仓库**运行：
 
 ```powershell
-$pluginRoot = (Get-Location).Path
-codex mcp add financial -- node "$pluginRoot/scripts/mcp-bootstrap.mjs"
+npm run repair:mcp
 ```
 
-Ubuntu 可用 `codex mcp add financial -- node "$(pwd)/scripts/mcp-bootstrap.mjs"`。完成后重新加载插件或新建聊天。该方式是路径兼容回退，不需要修改认证文件。恢复正常插件加载后，用 `codex mcp remove financial` 删除手工注册项，避免重复加载。
+该命令只修复知衡：源码指向源码目录，分发配置指向安装缓存，已安装各版本指向各自真实目录。已有的环境变量、其他 MCP 服务器和知衡附加参数会保留。原配置备份在各副本的 `.runtime/mcp-backups/`，不会删除数据或改动认证文件。
+
+只修复指定副本时，Windows 和 Ubuntu 均可执行：
+
+```text
+node scripts/configure-mcp.mjs --root "实际插件安装目录"
+```
+
+随后重新加载插件或重启 Codex，并新建聊天。验证 `.mcp.json` 中的 `financial.args[0]` 与 `financial.cwd` 都是存在的绝对路径；启动日志应能完成握手并列出 32 个工具。
+
+如果之前用 `codex mcp add financial` 手工注册过同名服务器，正常插件恢复后可用 `codex mcp remove financial` 删除该手工注册项，避免重复加载。使用自定义 Codex 数据目录时，运行安装/修复命令的 `CODEX_HOME` 应与 App 或 CLI 实际使用的目录一致。
 
 ## 网页研究或日报复核失败
 

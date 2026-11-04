@@ -43,6 +43,8 @@ npm run pack:plugin
 
 安装入口为 `npm run install:cli` / `npm run install:app`，详见[安装指南](getting-started.md)。MCP 从无第三方依赖的 `scripts/mcp-bootstrap.mjs` 进入；Python 配置在后台服务创建时按需执行，不阻塞 MCP 工具发现。安装回归测试覆盖并发、失败重试、目录复制、路径空格、显式解释器和两种客户端入口；跨系统流程在 CI 的 Ubuntu / Windows 矩阵中验证。
 
+1.1.1 起，`lib/mcp-config.mjs` 统一生成 MCP 配置。源码和本机分发目录使用生成的绝对路径，`npm run setup` 会刷新源码配置；CLI 安装后读取实际 `installedPath` 再修正缓存副本。ZIP 的 `.mcp.json` 单独生成可迁移的 Node 启动代码，不直接复制源码中的机器路径。旧副本可用 `npm run repair:mcp` 修复，备份放在各自 `.runtime/mcp-backups/`。路径回归测试从无关工作目录加载带空格和中文的安装目录，验证首次写回及配置保留。
+
 README 和截图保持相对路径，文档图片位于 `docs/assets/`。`codex-workspace-home.png` 来自当前界面的空数据演示，不含私人持仓或任务；其余旧截图随历史文档保留。
 
 [MIT License](../LICENSE)，Copyright (c) 2026 Yiwen Pang。第三方依赖保留各自许可证。

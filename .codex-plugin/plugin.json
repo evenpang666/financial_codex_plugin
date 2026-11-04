@@ -1,6 +1,6 @@
 {
   "name": "financial-agent",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "description": "知衡：A股、港股、美股研究，支持行情与财报核查、持仓管理与复核、双时点日报、策略回测和模型训练。服务主页： http://127.0.0.1:3205",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",

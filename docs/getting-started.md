@@ -36,7 +36,7 @@ cd financial_codex_plugin
 npm run install:cli
 ```
 
-安装器检查 CLI 的插件能力，准备 Node 和 Python 依赖，打包，然后执行 `codex plugin marketplace add <分发目录的绝对路径>` 和 `codex plugin add financial-agent@zhiheng-local`。任一步失败都会以非零状态退出；错误修复后可重新运行。
+安装器检查 CLI 的插件能力，准备 Node 和 Python 依赖，打包，然后执行 `codex plugin marketplace add <分发目录的绝对路径>` 和 `codex plugin add financial-agent@zhiheng-local --json`。最后根据 Codex 返回的 `installedPath`，为实际缓存副本写入绝对路径。任一步失败都会以非零状态退出；错误修复后可重新运行。
 
 安装完成后，新建聊天并启用 **financial-agent / 知衡 Financial Agent**。不需要手工编辑 Codex 配置或进入插件缓存执行 setup。
 
@@ -49,6 +49,8 @@ npm run install:cli
 
 `install:app` 只准备目录，最终安装由 App 的安装按钮完成。它不修改个人 marketplace、不覆盖其他插件，也不需要终端调用 `codex plugin add`。若 App 没有显示本地来源，检查打开的目录内是否有 `.agents/plugins/marketplace.json`，然后重启 App。
 
+App 分发配置由本机安装器生成，指向 `CODEX_HOME`（默认用户目录的 `.codex`）下的版本缓存绝对路径；运行准备命令与 App 应使用同一数据目录。安装器不再把 `${PLUGIN_ROOT}` 交给客户端展开。
+
 本地 marketplace 与缓存副本的行为依据 [OpenAI 插件打包文档](https://developers.openai.com/plugins/build/plugins)。本项目保留受支持的 `.codex-plugin/plugin.json`、`.mcp.json` 和 `skills/` 兼容布局。
 
 ## 使用分发 ZIP
@@ -59,6 +61,10 @@ npm run install:cli
 - App：直接将解压目录作为项目打开，在本地插件列表点击安装。
 
 这两种方式均不要求先运行 `npm run setup`；首次使用会在实际安装副本中配置 Python。首次联网准备可能需要数分钟，MCP 工具列表可先加载；若客户端工具调用超时，等依赖准备完成后重试“打开知衡工作台”。不要移动已注册的 marketplace 源目录。
+
+ZIP 内的 MCP 启动配置不含打包机器的绝对路径，也不设置占位符工作目录。首次启动时 Node 根据当前 `CODEX_HOME`、marketplace、插件名和版本定位缓存副本，写回该副本的绝对启动路径与 `cwd`。与本机生成的分发目录相比，ZIP 可以跨用户、跨系统传递。
+
+旧版本若遇到 Windows 错误 267，更新源码后运行 `npm run repair:mcp`，再重新加载插件。修复与备份细节见 [MCP 排查](troubleshooting.md#mcp-无法启动)。
 
 ## 本地 uv 与 Python 环境
 

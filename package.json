@@ -1,6 +1,6 @@
 {
   "name": "codex-financial-agent",
-  "version": "1.1.0",
+  "version": "1.1.1",
   "private": true,
   "type": "module",
   "description": "知衡 Codex 独立金融研究插件：A股、港股、美股、日报、持仓、回测与模型训练",
@@ -15,6 +15,7 @@
     "stop": "node scripts/stop.mjs",
     "mcp": "node scripts/mcp-server.mjs",
     "setup": "node scripts/setup.mjs",
+    "repair:mcp": "node scripts/configure-mcp.mjs --all",
     "install:cli": "node scripts/install.mjs --cli",
     "install:app": "node scripts/install.mjs --app",
     "check": "node scripts/check-plugin.mjs",

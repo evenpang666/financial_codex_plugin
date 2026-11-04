@@ -36,6 +36,14 @@
 
 CLI 安装需要支持 `codex plugin add` 的 Codex CLI。App 安装准备不依赖 CLI；网页自然语言研究仍需要已登录的 Codex CLI。Ubuntu 可使用 CLI；App 是否可用以官方客户端支持的平台为准，插件不提供 Linux 桌面客户端。
 
+**1.1.1 修复了插件路径未展开造成的 Windows 错误 267。** 安装器会将启动脚本和工作目录写成实际绝对路径，插件启动不再依赖 `${PLUGIN_ROOT}`。已有安装请在更新后的仓库根目录执行：
+
+```text
+npm run repair:mcp
+```
+
+该命令修复源码、分发目录和本机已安装知衡副本的 MCP 配置，并备份原配置。完成后重新加载插件或重启 Codex，再新建聊天。若只需修复一个副本，见 [MCP 启动排查](docs/troubleshooting.md#mcp-无法启动)。
+
 例如，在 Windows PowerShell 或 Ubuntu 终端中执行相同命令：
 
 ```powershell
@@ -43,6 +51,8 @@ npm run install:cli
 ```
 
 安装器会准备依赖并生成干净的分发目录。插件缓存副本首次加载时，在后台通过本地 uv 配置自己的 Python 环境；后续启动直接复用。自定义 uv 路径、镜像与离线配置，以及解压 ZIP 安装方式，见[安装与更新指南](docs/getting-started.md)。
+
+分发 ZIP 使用可迁移的启动配置，首次启动时由 Node 解析安装目录并写回绝对路径；不会包含打包机器的个人路径。移动目录或更改 `CODEX_HOME` 后，应重新运行安装或修复命令。
 
 ## 快速使用
 
@@ -74,7 +84,7 @@ npm start
 | 日报打不开 | 请 Codex“打开知衡工作台”获取实际地址，或在运行目录执行 `npm start`；见[服务启动排查](docs/troubleshooting.md#日报或工作台打不开) |
 | Python 依赖缺失 | 在实际安装目录运行 `npm run setup`，见[运行环境](docs/getting-started.md#准备运行环境) |
 | 网页研究失败 | 确认 `codex login` 已完成，查看网页任务错误，见[研究失败排查](docs/troubleshooting.md#网页研究或日报复核失败) |
-| MCP 启动报错 | 检查 Node 路径与插件路径展开，见[MCP 排查](docs/troubleshooting.md#mcp-无法启动) |
+| Windows 错误 267 / MCP 启动失败 | 在更新后的仓库运行 `npm run repair:mcp`，然后重新加载插件；见[MCP 排查](docs/troubleshooting.md#mcp-无法启动) |
 
 安装、配置、数据口径和开发细节统一收录于[完整文档](docs/README.md)。本项目用于研究，不连接券商、不执行交易。
 

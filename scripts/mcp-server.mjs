@@ -20,7 +20,7 @@ if(!only)tools.push(...extraTools(runtime));
 const ajv=new Ajv({strict:false,allErrors:true});
 ajv.addFormat('date',/^\d{4}-\d{2}-\d{2}$/);
 const validators=new Map(tools.map(t=>[t.name,ajv.compile(t.parameters)]));
-const server=new Server({name:'financial-agent',version:'1.1.0'},{capabilities:{tools:{}}});
+const server=new Server({name:'financial-agent',version:'1.1.1'},{capabilities:{tools:{}}});
 const mutates=new Set(['set_portfolio','get_daily_research_report','open_financial_workspace','start_financial_job','cancel_financial_job','update_portfolio_holding','delete_portfolio_holding','set_report_schedule']);
 server.setRequestHandler(ListToolsRequestSchema,async()=>({tools:tools.map(t=>({name:t.name,description:t.description,inputSchema:t.parameters,annotations:{readOnlyHint:!mutates.has(t.name),destructiveHint:['set_portfolio','delete_portfolio_holding'].includes(t.name),openWorldHint:true}}))}));
 server.setRequestHandler(CallToolRequestSchema,async request=>{

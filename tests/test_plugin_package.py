@@ -18,8 +18,13 @@ class PluginPackageTests(unittest.TestCase):
             (root / 'scripts').mkdir()
             source = Path(__file__).resolve().parents[1] / 'scripts/package_plugin.py'
             shutil.copyfile(source, root / 'scripts/package_plugin.py')
+            project = Path(__file__).resolve().parents[1]
+            shutil.copyfile(project / 'scripts/configure-mcp.mjs', root / 'scripts/configure-mcp.mjs')
+            (root / 'scripts/mcp-bootstrap.mjs').write_text('// fixture')
+            (root / 'lib').mkdir()
+            shutil.copyfile(project / 'lib/mcp-config.mjs', root / 'lib/mcp-config.mjs')
             (root / '.codex-plugin').mkdir()
-            (root / '.codex-plugin/plugin.json').write_text(json.dumps({'version': '2.3.4'}))
+            (root / '.codex-plugin/plugin.json').write_text(json.dumps({'name': 'financial-agent', 'version': '2.3.4'}))
             names = ['.mcp.json', '.env.example', 'package.json', 'package-lock.json',
                      'requirements.txt', 'uv.toml', 'README.md', 'LICENSE', 'start.bat', 'start.sh']
             for name in names:
@@ -34,7 +39,7 @@ class PluginPackageTests(unittest.TestCase):
             directory.mkdir(parents=True)
             (directory / 'stale.txt').write_text('old build')
             result = subprocess.run([sys.executable, str(root / 'scripts/package_plugin.py')],
-                                    cwd=root, capture_output=True, text=True)
+                                    cwd=root, capture_output=True, text=True, encoding='utf-8')
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertFalse((directory / 'stale.txt').exists())
             with ZipFile(root / 'dist/financial-agent-2.3.4.zip') as archive:
@@ -42,8 +47,17 @@ class PluginPackageTests(unittest.TestCase):
                 paths = archive.namelist()
                 self.assertIn('uv.toml', paths)
                 self.assertIn('.agents/plugins/marketplace.json', paths)
+                config = json.loads(archive.read('.mcp.json'))['mcpServers']['financial']
+                self.assertNotIn('cwd', config)
+                self.assertIn('-e', config['args'])
+                self.assertNotIn('${PLUGIN_ROOT}', archive.read('.mcp.json').decode())
+                self.assertNotIn(str(root), archive.read('.mcp.json').decode())
                 self.assertFalse(any(path.startswith(('data/', '.runtime/', '.uv-cache/', '.venv/', 'config/')) for path in paths))
                 self.assertNotIn('.env', paths)
+            configured = json.loads((directory / '.mcp.json').read_text())['mcpServers']['financial']
+            self.assertTrue(Path(configured['cwd']).is_absolute())
+            self.assertTrue(Path(configured['args'][0]).is_absolute())
+            self.assertEqual(Path(configured['cwd']).name, '2.3.4')
 
 
 if __name__ == '__main__':

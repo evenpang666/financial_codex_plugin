@@ -1,14 +1,18 @@
 import { readFile, readdir, access } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { researchTools } from '../lib/runtime.mjs';
+import { absoluteMcpConfig } from '../lib/mcp-config.mjs';
+import { fileURLToPath } from 'node:url';
 const manifest=JSON.parse(await readFile(new URL('../.codex-plugin/plugin.json',import.meta.url),'utf8'));
 const pkg=JSON.parse(await readFile(new URL('../package.json',import.meta.url),'utf8'));
 assert.equal(manifest.version,pkg.version);
 for(const path of [manifest.skills,manifest.mcpServers])assert.ok(path.startsWith('./')&&!path.includes('..'));
 const config=JSON.parse(await readFile(new URL('../.mcp.json',import.meta.url),'utf8'));
 assert.equal(config.mcpServers.financial.type,'stdio');
-assert.equal(config.mcpServers.financial.args[0],'${PLUGIN_ROOT}/scripts/mcp-bootstrap.mjs');
-assert.equal(config.mcpServers.financial.cwd,'${PLUGIN_ROOT}');
+const expected=absoluteMcpConfig(fileURLToPath(new URL('../',import.meta.url))).mcpServers.financial;
+assert.equal(config.mcpServers.financial.args[0],expected.args[0]);
+assert.equal(config.mcpServers.financial.cwd,expected.cwd);
+assert.ok(!JSON.stringify(config).includes('${PLUGIN_ROOT}'));
 const skills=await readdir(new URL('../skills/',import.meta.url));
 for(const skill of skills){const text=await readFile(new URL(`../skills/${skill}/SKILL.md`,import.meta.url),'utf8');assert.match(text,/^---\s*\nname:/);assert.match(text,/description:/);}
 for(const path of ['scripts/mcp-server.mjs','scripts/us_market.py','scripts/us_strategy.py','lib/agent.mjs'])await access(new URL('../'+path,import.meta.url));
