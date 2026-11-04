@@ -2,11 +2,11 @@
   "mcpServers": {
     "financial": {
       "type": "stdio",
-      "command": "C:\\Program Files\\nodejs\\node.exe",
+      "command": "C:\\Users\\15261\\AppData\\Roaming\\fnm\\aliases\\default\\node.exe",
       "args": [
-        "C:\\Users\\15261\\Documents\\GitHub\\financial_agent_codex\\scripts\\mcp-bootstrap.mjs"
+        "C:\\Users\\15261\\Documents\\projects\\financial_codex_plugin\\scripts\\mcp-bootstrap.mjs"
       ],
-      "cwd": "C:\\Users\\15261\\Documents\\GitHub\\financial_agent_codex"
+      "cwd": "C:\\Users\\15261\\Documents\\projects\\financial_codex_plugin"
     }
   }
 }

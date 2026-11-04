@@ -1,6 +1,5 @@
 const backtestMeta = document.querySelector('#backtestMeta')
 const backtestContent = document.querySelector('#backtestContent')
-const connectionState = document.querySelector('#connectionState')
 const backtestIndex = document.querySelector('#backtestIndex')
 const backtestIndexPanel = document.querySelector('#backtestIndexPanel')
 const backtestIndexSections = document.querySelector('#backtestIndexSections')
@@ -273,8 +272,6 @@ setInterval(loadBacktest, 30_000)
 
 const backtestEvents = new EventSource('/api/events')
 backtestEvents.addEventListener('backtest', loadBacktest)
-backtestEvents.addEventListener('open', () => { connectionState.textContent = '实时连接' })
-backtestEvents.addEventListener('error', () => { connectionState.textContent = '自动刷新中' })
 
 document.querySelector('#taskForm [name=market]')?.addEventListener('change', loadBacktest);
 document.querySelector('#taskForm [name=timeframe]')?.addEventListener('change', loadBacktest);

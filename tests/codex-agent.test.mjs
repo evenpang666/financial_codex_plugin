@@ -43,3 +43,14 @@ test('Codex bridge applies saved model and effort instead of environment default
   assert.equal(result.model, 'gpt-6-luna');
   assert.equal(result.reasoningEffort, 'low');
 });
+
+test('Codex bridge attaches local images separately from the stdin prompt', async () => {
+  const path = 'C:/temporary folder/holdings.png';
+  const run = mockProcess([{type:'item.completed',item:{type:'agent_message',text:'{"text":"002297 博云新材","issues":[]}'}}], 0, (_cmd, args) => {
+    assert.equal(args[args.indexOf('--image') + 1], path);
+    assert.equal(args.at(-1), '-');
+    assert.equal(args[args.indexOf('--sandbox') + 1], 'read-only');
+  });
+  const result = await createResearchAgent(null, process.cwd(), [], {}, run)('识别截图', {purpose:'portfolio', allowedTools:[], images:[path]});
+  assert.match(result.text, /002297/);
+});

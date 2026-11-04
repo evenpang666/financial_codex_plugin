@@ -39,11 +39,11 @@ test('environment overrides initialize settings, while saved preferences take pr
 test('settings API serves assets, rejects foreign origins, and applies selections to subsequent Codex calls', async t => {
   const root = await directory(t, false), calls = [];
   await mkdir(join(root, 'web'));
-  for (const file of ['settings.html','settings.js','settings.css','theme.js','theme.css']) await copyFile(new URL('../web/' + file, import.meta.url), join(root, 'web', file));
+  for (const file of ['settings.html','settings.js','settings.css','theme.js','theme.css','workspace.js','workspace.css']) await copyFile(new URL('../web/' + file, import.meta.url), join(root, 'web', file));
   const site = await createFinanceServer({root, network:null, env:{}, research: async (_prompt, options) => { calls.push(options); return {text:'完成'}; }});
   const port = await listen(site.server, 0), base = `http://127.0.0.1:${port}`;
   t.after(async () => { await site.close(); await rm(root, {recursive:true, force:true}); });
-  for (const path of ['/settings','/settings/','/settings.js','/settings.css','/theme.js','/theme.css']) assert.equal((await fetch(base + path)).status, 200, path);
+  for (const path of ['/settings','/settings/','/settings.js','/settings.css','/theme.js','/theme.css','/workspace.js','/workspace.css']) assert.equal((await fetch(base + path)).status, 200, path);
   const initial = await (await fetch(base + '/api/settings')).json();
   assert.equal(initial.model, 'gpt-6-sol'); assert.equal(initial.reasoningEffort, 'high');
   const request = {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({model:'gpt-6-luna', reasoningEffort:'low'})};

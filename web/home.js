@@ -50,7 +50,7 @@ async function refresh() {
       if (job.result?.reportId) { const link = node('a', 'quiet', '阅读日报 ↗'); link.href = '/reports?report=' + encodeURIComponent(job.result.reportId); card.append(link); }
       return card;
     }));
-  } catch (e) { if (++failures >= 2) { $('#notice').textContent = '与本地服务的连接已断开，请检查启动窗口。'; $('#navStatus').textContent = '连接中断'; } }
+  } catch (e) { if (++failures >= 2) { $('#notice').textContent = '与本地服务的连接已断开，请检查启动窗口。'; } }
   finally { refreshing = false; }
 }
 $('#researchForm').addEventListener('submit', async event => {
@@ -61,7 +61,7 @@ $('#researchForm').addEventListener('submit', async event => {
 });
 document.querySelectorAll('[data-prompt]').forEach(button => button.addEventListener('click', () => { $('#question').value = button.dataset.prompt; $('#question').focus(); }));
 $('#refreshJobs').addEventListener('click', refresh);
-void api('/api/status').then(status => { $('#navStatus').textContent = 'Agent 已连接'; $('#modelLabel').textContent = (status.model || 'Codex 默认模型') + (status.reasoningEffort ? ` · ${{low:'低',medium:'中',high:'高',xhigh:'更高',max:'最高'}[status.reasoningEffort] || status.reasoningEffort}` : ''); }).catch(() => { $('#navStatus').textContent = '连接失败'; $('#modelLabel').textContent = '请检查 Codex 启动窗口'; });
+void api('/api/status').then(status => { $('#modelLabel').textContent = (status.model || 'Codex 默认模型') + (status.reasoningEffort ? ` · ${{low:'低',medium:'中',high:'高',xhigh:'更高',max:'最高'}[status.reasoningEffort] || status.reasoningEffort}` : ''); }).catch(() => { $('#modelLabel').textContent = '请检查 Codex 启动窗口'; });
 void api('/api/reports').then(data => { $('#reportCount').textContent = `${data.reports.length} 份本地日报`; }).catch(() => { $('#reportCount').textContent = '归档暂不可用'; });
 void api('/api/backtests').then(data => { $('#backtestCount').textContent = `${data.runs.length} 次回测记录`; }).catch(() => { $('#backtestCount').textContent = '记录暂不可用'; });
 void refresh(); setInterval(refresh, 2500); document.addEventListener('visibilitychange', refresh);

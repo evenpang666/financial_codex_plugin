@@ -6,9 +6,13 @@
   <title>策略解读 · 知衡</title>
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/soft-ui.css"><link rel="stylesheet" href="/dark-ui.css"><link rel="stylesheet" href="/strategy-guide.css">
-<script src="/theme.js"></script><link rel="stylesheet" href="/theme.css"></head>
+<script src="/theme.js"></script><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/workspace.css"><script src="/workspace.js" defer></script></head>
 <body>
-  <header class="topbar"><a class="brand" href="/">知衡 · 策略解读</a><nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio">持仓</a><a href="/backtests">回测</a><a href="/simulation">模拟</a><a href="/strategy-guide" aria-current="page">策略解读</a><a href="/settings">设置</a></nav></header>
+  <header class="topbar workspace-header">
+    <a class="workspace-brand" href="/" aria-label="返回知衡研究首页"><img src="/icon.svg" width="32" height="32" alt=""><strong>知衡</strong></a>
+    <nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio">持仓</a><a href="/backtests">回测</a><a href="/simulation">模拟</a><a href="/strategy-guide" aria-current="page">策略解读</a><a href="/settings">设置</a></nav>
+    <span class="workspace-connection" data-state="pending" role="status" aria-live="polite" aria-label="本地服务连接状态">正在连接</span>
+  </header>
   <main class="report-page guide-page">
     <section class="intro guide-intro" aria-labelledby="guideTitle"><h1 id="guideTitle">策略解读</h1><p>当前可用的 10 种策略：触发条件、适用情形和主要风险。</p><div class="guide-actions"><a href="/backtests">回测</a><a href="/simulation">模拟交易</a></div></section>
     <section class="guide-primer" aria-labelledby="primerTitle"><div><h2 id="primerTitle">信号周期</h2></div><p>网页回测和部署使用<strong>完整日线、周线或月线</strong>信号；模拟交易只用日线。A 股盘中研究使用<strong>已完成的 5 分钟 K 线</strong>，规则口径见页底。下方参数中的周期数指 K 线根数。</p></section>

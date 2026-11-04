@@ -1,7 +1,6 @@
 const reportElement = document.querySelector('#report')
 const statusCard = document.querySelector('#statusCard')
 const updatedAt = document.querySelector('#updatedAt')
-const connectionState = document.querySelector('#connectionState')
 const reportDate = document.querySelector('#reportDate')
 const refreshButton = document.querySelector('#refreshButton')
 const requestedReport = new URLSearchParams(window.location.search).get('report') || ''
@@ -545,9 +544,7 @@ async function loadIndex(preferredId = '') {
       reportDate.value = selected
       showReport(await requestJson(`/api/reports/${encodeURIComponent(selected)}`))
     }
-    connectionState.textContent = '已连接'
   } catch (error) {
-    connectionState.textContent = '连接失败'
     updatedAt.textContent = '无法连接本地日报服务'
     showEmpty('日报服务不可用', '请确认启动器正在运行，并检查局域网或防火墙设置。', true)
   }
@@ -567,5 +564,4 @@ reportEvents.addEventListener('report', event => {
   loadIndex(payload.id || payload.date)
 })
 reportEvents.addEventListener('ranking', event => handleRankingPublication(JSON.parse(event.data)))
-reportEvents.addEventListener('open', () => { connectionState.textContent = '实时连接'; refreshRankingPublication(); restoreRankingJob() })
-reportEvents.addEventListener('error', () => { connectionState.textContent = '自动刷新中' })
+reportEvents.addEventListener('open', () => { refreshRankingPublication(); restoreRankingJob() })

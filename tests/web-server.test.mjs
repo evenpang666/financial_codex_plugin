@@ -412,6 +412,27 @@ test('text portfolio job uses Codex, resolves metadata and saves mixed markets t
   const preview=await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'portfolio',text:'600519 100股\n港股 00700 200股',preview:true})});
   const previewJob=await finished(base,(await preview.json()).id);assert.equal(previewJob.result.preview,true);assert.equal(imports,1);
 });
+test('image jobs accept screenshot-sized uploads, stay preview-only and omit image data from saved jobs', async t => {
+  let calls = 0, imagePath;
+  const bytes = Buffer.concat([Buffer.from([137,80,78,71,13,10,26,10]), Buffer.alloc(30000)]);
+  const image = 'data:image/png;base64,' + bytes.toString('base64');
+  const {base, root} = await fixture(t, async (_prompt, options) => {
+    calls++; imagePath=options.images[0];
+    assert.deepEqual(await readFile(imagePath), bytes); assert.deepEqual(options.allowedTools, []);
+    return {text:JSON.stringify({text:'002297 博云新材\n000066 中国长城',issues:[]})};
+  }, {dataHandler:async(req)=>{if(req.url.startsWith('/v1/portfolio/')) throw Error('Image preview must not touch stored holdings'); return false;}});
+  const response=await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'portfolio',image,preview:false})});
+  assert.equal(response.status,202); const job=await finished(base,(await response.json()).id);
+  assert.equal(job.status,'completed'); assert.equal(job.result.preview,true);assert.match(job.result.recognizedText,/002297/);
+  await assert.rejects(readFile(imagePath),{code:'ENOENT'});
+  const persisted=await readFile(join(root,'data/web/jobs.json'),'utf8');assert.doesNotMatch(persisted,/data:image|base64/);
+  for (const invalid of [image.replace('image/png','image/jpeg'), 'data:image/svg+xml;base64,PHN2Zz4=', {}]) {
+    assert.equal((await fetch(base+'/api/jobs',{method:'POST',body:JSON.stringify({kind:'portfolio',image:invalid})})).status,400);
+  }
+  assert.equal((await fetch(base+'/api/jobs',{method:'POST',headers:{Origin:'https://foreign.example'},body:JSON.stringify({kind:'portfolio',image})})).status,403);
+  assert.equal(calls,1);
+});
+
 test('saved portfolio edits and deletions route exact market identities without invoking Codex', async t => {
   const calls = []; let agentCalls = 0;
   const {base} = await fixture(t, async () => {agentCalls++;}, {dataHandler: async (req,res) => {

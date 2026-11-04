@@ -10,11 +10,12 @@
   <link rel="stylesheet" href="/portfolio.css">
   <link rel="stylesheet" href="/dark-ui.css">
   <link rel="icon" href="/icon.svg" type="image/svg+xml">
-<script src="/theme.js"></script><link rel="stylesheet" href="/theme.css"></head>
+<script src="/theme.js"></script><link rel="stylesheet" href="/theme.css"><link rel="stylesheet" href="/workspace.css"><script src="/workspace.js" defer></script></head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="/">知衡 · 持仓工作台</a>
+  <header class="topbar workspace-header">
+    <a class="workspace-brand" href="/" aria-label="返回知衡研究首页"><img src="/icon.svg" width="32" height="32" alt=""><strong>知衡</strong></a>
     <nav class="workspace-navigation" aria-label="工作台导航"><a href="/">研究</a><a href="/reports">日报</a><a href="/portfolio" aria-current="page">持仓</a><a href="/backtests">回测</a><a href="/simulation">模拟</a><a href="/strategy-guide">策略解读</a><a href="/settings">设置</a></nav>
+    <span class="workspace-connection" data-state="pending" role="status" aria-live="polite" aria-label="本地服务连接状态">正在连接</span>
   </header>
   <main class="report-page portfolio-page">
     <section class="intro" aria-labelledby="pageTitle">
@@ -31,11 +32,18 @@
     </section>
     <nav class="portfolio-section-nav" aria-label="持仓功能"><a href="#portfolioEntry">管理持仓</a><a href="#portfolioTools">分析持仓</a><a href="#portfolioWorkbench">持仓池回测 / 部署</a><a href="#portfolioHistory">回测记录</a></nav>
     <details id="portfolioEntry" class="task-panel portfolio-entry">
-      <summary>持仓管理<span>文本添加 · 编辑股数 · 移除持仓 · A股、港股与美股</span></summary>
-      <p>直接写股票代码和当前持有股数，Codex CLI 自动识别并补全名称。6 位数字代码识别为 A 股，1–5 位数字代码识别为港股；也可以注明“港股”或使用 .HK 后缀。美股使用 ticker（例如 AAPL 1.5股）。再次识别只新增或更新本次输入的持仓，未提及的持仓会保留；删除请使用持仓旁的“删除”按钮。</p>
+      <summary>持仓管理<span>文字 / 图片添加 · 编辑股数 · 移除持仓 · A股、港股与美股</span></summary>
+      <p>填写股票代码和当前持有股数，或上传股票列表、持仓截图。图片识别结果会填入下方文本框，核对并补齐股数后再保存。6 位数字代码识别为 A 股，1–5 位数字代码识别为港股；也可以注明“港股”或使用 .HK 后缀。美股使用 ticker（例如 AAPL 1.5股）。再次识别只新增或更新本次输入的持仓，未提及的持仓会保留。</p>
       <form id="portfolioEntryForm">
+        <div id="portfolioImageDrop" class="portfolio-image-upload">
+          <label for="portfolioEntryImage">上传图片识别</label>
+          <p id="portfolioImageHelp" class="ranking-note">选择、拖入或粘贴截图，支持 PNG、JPEG、WebP，单张不超过 8 MB。仅有代码和名称的图片也可以识别。</p>
+          <input id="portfolioEntryImage" type="file" accept="image/png,image/jpeg,image/webp" aria-describedby="portfolioImageHelp">
+          <div id="portfolioImagePreview" class="portfolio-image-preview" hidden><img id="portfolioImageThumbnail" alt="待识别的股票截图"><span id="portfolioImageName"></span><button id="portfolioImageRemove" type="button">移除图片</button></div>
+          <button id="portfolioImageRecognize" type="submit" value="image" disabled>识别图片并填入文字</button>
+        </div>
         <label for="portfolioEntryText">我的持仓</label>
-        <textarea id="portfolioEntryText" name="text" rows="4" maxlength="6000" placeholder="600519 100股&#10;000858 200股&#10;港股 00700 300股" required></textarea>
+        <textarea id="portfolioEntryText" name="text" rows="4" maxlength="6000" placeholder="600519 100股&#10;000858 200股&#10;港股 00700 300股"></textarea>
         <p class="ranking-note">数量按“股”填写，不按手。同市场同代码更新为本次股数，其他持仓保留；无需填写成本价。</p>
         <div class="portfolio-entry-actions"><button class="primary" type="submit" value="save">Codex 识别并保存</button><button type="submit" value="preview">仅预览识别结果</button><button id="portfolioEntryCancel" type="button" hidden>取消任务</button></div>
       </form>
