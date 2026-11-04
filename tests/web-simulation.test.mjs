@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {advanceSimulation, createPaperTrading} from '../lib/paper-trading.mjs';
 
 const now = new Date('2026-11-04T02:00:00Z');
-const snapshot = (overrides = {}) => ({day: '2026-11-04', marketOpen: true,
+const snapshot = (overrides = {}) => ({day: '2026-11-04', marketOpen: true, marketOpenUntil: '2026-11-04T02:01:00Z',
   quotes: [{symbol: '600001', price: 10, as_of: now.toISOString()}, {symbol: '600002', price: 20, as_of: now.toISOString()}],
   signals: {asOf: '2026-11-03', topN: 1, rows: [{symbol:'600001',score:1,entry:true}, {symbol:'600002',score:0,entry:false}]}, ...overrides});
 const ledger = () => ({market:'a', initialEquity:20000, cash:0, costs:0, positions:[{symbol:'600001',shares:1000,price:10},{symbol:'600002',shares:500,price:20}], trades:[], history:[]});
@@ -24,9 +24,21 @@ test('daily rebalance sells before buying, respects cash and lots, and includes 
 });
 
 test('closed sessions, stale quotes, incomplete and future signals never change positions', () => {
-  for (const data of [snapshot({marketOpen:false}), snapshot({quotes:[]}), snapshot({signals:{rows:[]}}), snapshot({signals:{...snapshot().signals,asOf:'2026-11-04'}}), snapshot({quotes:snapshot().quotes.map(row => ({...row,as_of:'2026-11-04T01:00:00Z'}))})]) {
+  for (const data of [snapshot({marketOpen:false}), snapshot({marketOpenUntil:null}), snapshot({marketOpenUntil:now.toISOString()}), snapshot({quotes:[]}), snapshot({signals:{rows:[]}}), snapshot({signals:{...snapshot().signals,asOf:'2026-11-04'}}), snapshot({quotes:snapshot().quotes.map(row => ({...row,as_of:'2026-11-04T01:00:00Z'}))})]) {
     const row = advanceSimulation(ledger(), data, now);
     assert.equal(row.trades.length,0); assert.deepEqual(row.positions.map(row => row.shares),[1000,500]);
+  }
+});
+
+test('an open snapshot cannot execute a trade once its market minute expires', () => {
+  for (const closedAt of ['2026-11-04T03:30:00Z', '2026-11-04T07:00:00Z']) {
+    const time = new Date(closedAt);
+    const data = snapshot({marketOpenUntil:closedAt,
+      quotes:snapshot().quotes.map(quote => ({...quote,as_of:time.toISOString()}))});
+    const row = advanceSimulation(ledger(), data, time);
+    assert.equal(row.marketOpen, false);
+    assert.equal(row.trades.length, 0);
+    assert.deepEqual(row.positions.map(position => position.shares), [1000,500]);
   }
 });
 
@@ -36,7 +48,7 @@ test('A-share purchases remain locked until the next market day; prior holdings 
   advanceSimulation(row, snapshot({signals:noEntry}), now);
   assert.equal(row.positions[0].shares,400); assert.equal(row.positions[1].shares,0);
   const tomorrow = new Date('2026-11-05T02:00:00Z');
-  advanceSimulation(row, snapshot({day:'2026-11-05',signals:noEntry,quotes:snapshot().quotes.map(quote => ({...quote,as_of:tomorrow.toISOString()}))}),tomorrow);
+  advanceSimulation(row, snapshot({day:'2026-11-05',marketOpenUntil:'2026-11-05T02:01:00Z',signals:noEntry,quotes:snapshot().quotes.map(quote => ({...quote,as_of:tomorrow.toISOString()}))}),tomorrow);
   assert.equal(row.positions[0].shares,0);
 });
 
@@ -49,7 +61,7 @@ test('older quotes cannot overwrite a newer portfolio valuation', () => {
 test('missing history for a zero-position candidate is shown without blocking held-stock rebalance', () => {
   const row = {market:'a',initialEquity:10000,cash:0,costs:0,allowNewStocks:true,
     initialPositions:[{symbol:'600001',shares:1000}],positions:[{symbol:'600001',shares:1000,price:10},{symbol:'920167',shares:0,price:0}],trades:[],history:[]};
-  const result = advanceSimulation(row,{day:'2026-11-04',marketOpen:true,
+  const result = advanceSimulation(row,{day:'2026-11-04',marketOpen:true,marketOpenUntil:'2026-11-04T02:01:00Z',
     quotes:[{symbol:'600001',price:10,as_of:now.toISOString()}],
     signals:{asOf:'2026-11-03',topN:1,rows:[{symbol:'600001',score:1,entry:true}],skipped:[{symbol:'920167',reason:'历史行情缺失'}]}},now);
   assert.equal(result.rebalancedDay,'2026-11-04');

@@ -21,12 +21,21 @@ class PaperSnapshotTests(unittest.TestCase):
     def test_calendars_exclude_lunch_holidays_and_us_early_close(self):
         for market, zone, value, expected in [
             ('a', 'Asia/Shanghai', '2026-11-04T10:00', True),
+            ('a', 'Asia/Shanghai', '2026-11-04T09:29:59', False),
+            ('a', 'Asia/Shanghai', '2026-11-04T09:30:00', True),
+            ('a', 'Asia/Shanghai', '2026-11-04T11:29:59', True),
+            ('a', 'Asia/Shanghai', '2026-11-04T11:30:00', False),
+            ('a', 'Asia/Shanghai', '2026-11-04T13:00:00', True),
+            ('a', 'Asia/Shanghai', '2026-11-04T15:00:00', False),
             ('a', 'Asia/Shanghai', '2026-11-04T12:00', False),
             ('a', 'Asia/Shanghai', '2026-11-07T10:00', False),
             ('hk', 'Asia/Hong_Kong', '2026-11-04T10:00', True),
             ('hk', 'Asia/Hong_Kong', '2026-11-04T12:30', False),
+            ('hk', 'Asia/Hong_Kong', '2026-11-04T12:00:00', False),
+            ('hk', 'Asia/Hong_Kong', '2026-11-04T16:00:00', False),
             ('us', 'America/New_York', '2026-11-27T12:00', True),
             ('us', 'America/New_York', '2026-11-27T14:00', False),
+            ('us', 'America/New_York', '2026-11-27T13:00:00', False),
         ]:
             with self.subTest(market=market, value=value):
                 self.assertEqual(paper.market_session(market, datetime.fromisoformat(value).replace(tzinfo=ZoneInfo(zone))), expected)
@@ -78,6 +87,7 @@ class PaperSnapshotTests(unittest.TestCase):
             result = paper.paper_snapshot({'market':'a','strategy':'momentum','symbols':['600001']})
             self.assertIn('历史缺失', result['signals']['error'])
             self.assertEqual(result['quotes'], [])
+            self.assertEqual(datetime.fromisoformat(result['marketOpenUntil']).second, 0)
             with self.assertRaises(ValueError):
                 paper.paper_snapshot({'market':'a','strategy':'xgboost@test','symbols':['600001']})
             with self.assertRaises(ValueError):

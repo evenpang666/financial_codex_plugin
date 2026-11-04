@@ -72,4 +72,7 @@ def paper_snapshot(payload):
             result['signals'] = {'error': f'日线策略信号暂不可用：{error}'}
     finished = datetime.now(ZoneInfo(ZONES[market]))
     result['marketOpen'] = finished.date() == now.date() and market_session(market, finished)
+    # A quote/signal response can cross a lunch or closing boundary in transit.
+    # The ledger may trade only before the end of the checked exchange minute.
+    result['marketOpenUntil'] = (finished.replace(second=0, microsecond=0) + timedelta(minutes=1)).isoformat() if result['marketOpen'] else None
     return result
