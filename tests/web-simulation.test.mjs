@@ -46,6 +46,33 @@ test('older quotes cannot overwrite a newer portfolio valuation', () => {
   assert.equal(row.equity,20000);
 });
 
+test('opted-in candidate stocks can enter, while later cash deposits do not count as profit', async t => {
+  await mkdir('.test-tmp', {recursive:true}); const directory = await mkdtemp(join(process.cwd(),'.test-tmp/paper-candidates-'));
+  let candidateCalls = 0;
+  const service = await createPaperTrading({directory, portfolio:async()=>({holdings:[{market:'a',symbol:'600001',shares:100}]}),
+    candidates:async()=>{candidateCalls++;return [{symbol:'600002',name:'候选股'}];},
+    snapshot:async row=>({day:'2026-11-04',marketOpen:false,strategyName:'动量',quotes:row.positions.map(position=>({symbol:position.symbol,price:10,as_of:now.toISOString()}))})});
+  t.after(async()=>{await service.close();await rm(directory,{recursive:true,force:true});});
+  const started = await service.start({market:'a',strategy:'momentum',initialCash:1000,allowNewStocks:true});
+  assert.equal(candidateCalls,1); assert.deepEqual(started.positions.map(row=>[row.symbol,row.shares]),[['600001',100],['600002',0]]);
+  assert.equal(started.initialEquity,2000); assert.equal(started.profit,0);
+  await service.pause(started.id);
+  for (const addedCash of [-1,'100',null,1e13]) await assert.rejects(service.resume(started.id,{addedCash}),/新增资金/);
+  assert.equal(service.list()[0].status,'paused');
+  const resumed = await service.resume(started.id,{addedCash:100000,allowNewStocks:true});
+  assert.equal(resumed.cash,101000); assert.equal(resumed.equity,102000);
+  assert.equal(resumed.initialEquity,2000); assert.equal(resumed.addedCapital,100000);
+  assert.equal(resumed.profit,0); assert.equal(resumed.totalReturn,0);
+  assert.deepEqual(resumed.capitalEvents.map(event=>event.amount),[100000]);
+  const traded = advanceSimulation(structuredClone(resumed), snapshot({quotes:snapshot().quotes.map(quote=>({...quote,price:10})), signals:{asOf:'2026-11-03',topN:1,rows:[{symbol:'600001',score:0,entry:false},{symbol:'600002',score:1,entry:true}]}}),now);
+  assert.ok(traded.trades.some(trade=>trade.symbol==='600002' && trade.side==='buy'));
+  assert.ok(Math.abs(traded.profit - (traded.equity - 102000)) < 1e-6);
+  await service.pause(started.id);
+  const restricted = await service.resume(started.id,{allowNewStocks:false});
+  const noEntry = advanceSimulation(structuredClone(restricted), snapshot({signals:{asOf:'2026-11-03',topN:1,rows:[{symbol:'600001',score:0,entry:false},{symbol:'600002',score:1,entry:true}]}}),now);
+  assert.equal(noEntry.trades.some(trade=>trade.symbol==='600002' && trade.side==='buy'),false);
+});
+
 test('service snapshots saved holdings, persists across restarts and updates without an open page', async t => {
   await mkdir('.test-tmp', {recursive:true}); const directory = await mkdtemp(join(process.cwd(),'.test-tmp/paper-'));
   let saved = [{market:'a',symbol:'600001',shares:1000},{market:'hk',symbol:'00700',shares:200}], calls = 0;

@@ -5,7 +5,7 @@ const pct = value => `${(value * 100).toFixed(2)}%`;
 const stamp = value => value ? new Date(value).toLocaleString('zh-CN', {timeZone: 'Asia/Shanghai'}) : '—';
 const node = (tag, text, className = '') => { const el = document.createElement(tag); el.textContent = text; el.className = className; return el; };
 const currency = value => ({a: 'CNY', hk: 'HKD', us: 'USD'}[value]);
-let sessions = [], holdings = [], selected = '', loading = false, busy = false, optionsRequest = 0, optionsReady = false, sessionsReady = false, switchFor = '', switchLoadingFor = '', switchRequest = 0;
+let sessions = [], holdings = [], selected = '', loading = false, busy = false, optionsRequest = 0, optionsReady = false, sessionsReady = false, switchFor = '', switchLoadingFor = '', switchRequest = 0, resumeFor = '';
 const aiJobs = new Map(); let aiCardKey = '';
 async function api(path, options = {}) { const response = await fetch(path, {cache: 'no-store', ...options}), result = await response.json(); if (!response.ok) throw Error(result.error || '服务暂不可用'); return result; }
 function controls() {
@@ -19,7 +19,9 @@ function controls() {
   $('#pauseSimulation').hidden = selectedRow?.status !== 'running';
   $('#pauseSimulation').disabled = busy;
   $('#resumeSimulation').hidden = selectedRow?.status !== 'paused';
-  $('#resumeSimulation').disabled = busy || running;
+  $('#resumeSimulation').disabled = busy || running || !$('#resumeAddedCash').validity.valid;
+  $('#resumeAddedCash').disabled = busy || running || selectedRow?.status !== 'paused';
+  $('#resumeAllowNewStocks').disabled = busy || running || selectedRow?.status !== 'paused';
   $('#stopSimulation').disabled = busy || !selectedRow;
   $('#switchStrategy').disabled = busy || selectedRow?.status !== 'paused' || switchFor !== selectedRow?.id;
   $('#saveSimulationStrategy').disabled = $('#switchStrategy').disabled || !$('#switchStrategy').value || $('#switchStrategy').value === selectedRow?.strategy;
@@ -54,6 +56,7 @@ async function loadOptions() {
 }
 function initialSummary() {
   const rows = holdings.filter(row => (row.market || 'a') === market.value);
+  $('#startCashLabel').textContent = `本次新增资金（${currency(market.value)}）`;
   $('#initialHoldings').textContent = rows.length ? `默认初始持仓 · ${rows.map(row => `${row.name || row.symbol}（${row.symbol}）${number(row.shares)} 股`).join('、')}` : '当前市场暂无持仓，请先前往“持仓”页保存。'; controls();
 }
 function showAiAnalysis(recommendation, status = '') {
@@ -120,18 +123,26 @@ function render() {
   select.replaceChildren(...sessions.map(row => { const option = node('option', `${row.status === 'running' ? '运行中' : row.status === 'paused' ? '已暂停' : '旧记录'} · ${row.strategyName} · ${stamp(row.startedAt)}`); option.value = row.id; return option; })); select.value = selected;
   const row = sessions.find(row => row.id === selected); $('#simulationEmpty').hidden = Boolean(row); $('#simulationLedger').hidden = !row; controls(); if (!row) return;
   $('#simulationStrategyEditor').hidden = row.status !== 'paused';
+  $('#simulationResumeEditor').hidden = row.status !== 'paused';
+  $('#resumeCashLabel').textContent = `本次新增资金（${currency(row.market)}）`;
+  if (row.status === 'paused' && resumeFor !== row.id) { $('#resumeAddedCash').value = '0'; $('#resumeAllowNewStocks').checked = row.allowNewStocks === true; resumeFor = row.id; }
+  if (row.status !== 'paused') resumeFor = '';
   if (row.status === 'paused' && switchFor !== row.id && switchLoadingFor !== row.id) void loadSwitchOptions(row);
   if (row.status !== 'paused') { switchFor = ''; switchLoadingFor = ''; switchRequest++; }
   $('#simulationName').textContent = `${row.strategyName} · ${currency(row.market)}`;
   $('#simulationMeta').textContent = `开始 ${stamp(row.startedAt)} · 更新 ${stamp(row.updatedAt)}（北京时间） · ${row.tradeCount} 笔成交`;
   $('#simulationState').textContent = row.status === 'paused' ? `已暂停 · ${stamp(row.pausedAt)} · ${row.pauseReason === 'service' ? '服务断开后自动暂停，可手动恢复' : '可手动恢复'}` : row.status === 'stopped' ? `旧版已停止记录 · ${stamp(row.stoppedAt)}` : `${row.note}${row.error ? `：${row.error}` : ''}`;
   $('#simulationStrategyHistory').textContent = row.strategyChanges?.length ? `策略切换：${row.strategyChanges.map(change => `${stamp(change.at)} ${change.fromName || change.from} → ${change.toName || change.to}`).join('；')}` : '';
+  $('#simulationCapitalHistory').textContent = row.capitalEvents?.length ? `追加资金：${row.capitalEvents.map(event => `${stamp(event.at)} +${number(event.amount)} ${currency(row.market)}`).join('；')}` : '';
+  const outside = row.positions.filter(position => !row.initialPositions.some(initial => initial.symbol === position.symbol));
+  $('#simulationCandidatePool').textContent = `新股入仓：${row.allowNewStocks ? '允许' : '关闭'}${outside.length ? ` · 候选池新增 ${outside.length} 只（当前持有 ${outside.filter(position => position.shares > 0).length} 只）` : ''}${row.candidateError ? ` · ${row.candidateError}` : ''}`;
   const recommendation = selectedRecommendation(); if (recommendation) showAiAnalysis(recommendation);
-  const values = [['累计收益', `${number(row.profit)} ${currency(row.market)}`], ['累计收益率', pct(row.totalReturn)], ['账户总资产', number(row.equity)], ['可用现金', number(row.cash)], ['初始总资产', number(row.initialEquity)], ['手续费与滑点', number(row.costs)]];
+  const values = [['累计收益', `${number(row.profit)} ${currency(row.market)}`], ['累计收益率', pct(row.totalReturn)], ['账户总资产', number(row.equity)], ['可用现金', number(row.cash)], ['累计投入资产', number(row.initialEquity + (row.addedCapital || 0))], ['手续费与滑点', number(row.costs)]];
   $('#simulationMetrics').replaceChildren(...values.map(([label, value], index) => { const item = node('div', ''), strong = node('strong', value); if (index < 2) strong.className = row.profit > 0 ? 'profit-up' : row.profit < 0 ? 'profit-down' : ''; item.append(node('span', label), strong); return item; }));
   curve(row.history);
-  table('#simulationPositions', row.positions.map(position => [ `${position.name} (${position.symbol})`, number(row.initialPositions.find(initial => initial.symbol === position.symbol)?.shares || 0), number(position.shares), number(position.price), number(position.shares * position.price), row.equity > 0 ? pct(position.shares * position.price / row.equity) : '—', stamp(position.quoteAt)]), '暂无模拟持仓');
+  table('#simulationPositions', row.positions.filter(position => position.shares > 0).map(position => [ `${position.name} (${position.symbol})`, number(row.initialPositions.find(initial => initial.symbol === position.symbol)?.shares || 0), number(position.shares), number(position.price), number(position.shares * position.price), row.equity > 0 ? pct(position.shares * position.price / row.equity) : '—', stamp(position.quoteAt)]), '当前无持仓，资产保留为现金。');
   table('#simulationTrades', [...row.trades].reverse().map(trade => [stamp(trade.at), trade.symbol, trade.side === 'buy' ? '买入' : '卖出', number(trade.shares), number(trade.price), number(trade.fee), trade.signalDay]), '尚无模拟成交；休市、信号未触发或行情过期时会保留仓位。');
+  controls();
 }
 async function refresh() {
   if (loading || busy || document.hidden) return; loading = true;
@@ -145,7 +156,8 @@ form.addEventListener('submit', async event => {
     if (aiMode) await runAiAnalysis();
     const recommendationJob = aiJobs.get(market.value);
     const recommendationJobId = recommendationJob?.result?.recommendation?.strategy === strategy.value ? recommendationJob.id : undefined;
-    const row = await api('/api/simulations', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({market: market.value, strategy: strategy.value, initialCash: Number(form.elements.initialCash.value), ...(recommendationJobId ? {recommendationJobId} : {})})});
+    const row = await api('/api/simulations', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({market: market.value, strategy: strategy.value, initialCash: Number(form.elements.initialCash.value), allowNewStocks: form.elements.allowNewStocks.checked, ...(recommendationJobId ? {recommendationJobId} : {})})});
+    form.elements.initialCash.value = '0';
     selected = row.id; sessions.unshift(row); render(); $('#simulationNotice').textContent = aiMode ? 'AI 模拟已开始；推荐依据保存在分析卡片中。' : '模拟已开始，服务端将持续更新。';
   } catch (error) { $('#simulationNotice').textContent = error.message; }
   finally { busy = false; controls(); }
@@ -164,9 +176,10 @@ $('#stopSimulation').addEventListener('click', async () => {
   finally { busy = false; controls(); }
 });
 for (const action of ['pause', 'resume']) $(`#${action}Simulation`).addEventListener('click', async () => {
+  if (action === 'resume' && !$('#resumeAddedCash').reportValidity()) return;
   busy = true; controls();
   try {
-    const row = await api(`/api/simulations/${selected}/${action}`, {method: 'POST'});
+    const row = await api(`/api/simulations/${selected}/${action}`, {method: 'POST', ...(action === 'resume' ? {headers: {'Content-Type': 'application/json'}, body: JSON.stringify({addedCash: Number($('#resumeAddedCash').value), allowNewStocks: $('#resumeAllowNewStocks').checked})} : {})});
     sessions = sessions.map(item => item.id === row.id ? row : item); render();
     $('#simulationNotice').textContent = action === 'pause' ? '模拟已暂停，账本和收益记录已保存。' : '模拟已恢复，下一次行情更新时继续运行。';
   } catch (error) { $('#simulationNotice').textContent = error.message; }
@@ -174,6 +187,7 @@ for (const action of ['pause', 'resume']) $(`#${action}Simulation`).addEventList
 });
 market.addEventListener('change', () => { initialSummary(); const recommendation = aiJobs.get(market.value)?.result?.recommendation; $('#aiRecommendationCard').hidden = !recommendation; if (recommendation) showAiAnalysis(recommendation); void loadOptions(); });
 strategy.addEventListener('change', controls);
+$('#resumeAddedCash').addEventListener('input', controls);
 $('#simulationSelect').addEventListener('change', event => { selected = event.target.value; render(); });
 $('#switchStrategy').addEventListener('change', controls);
 $('#saveSimulationStrategy').addEventListener('click', async () => {

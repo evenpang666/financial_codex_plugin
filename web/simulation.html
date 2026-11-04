@@ -16,12 +16,13 @@
       <form id="simulationForm" class="task-fields">
         <label>市场<select name="market"><option value="a">A股 · CNY</option><option value="hk">港股 · HKD</option><option value="us">美股 · USD</option></select></label>
         <label class="simulation-strategy">日线策略 / 已验证模型<select name="strategy" required disabled><option value="">正在读取策略…</option></select></label>
-        <label>额外初始现金<input name="initialCash" type="number" min="0" max="1000000000000" step="0.01" value="0" required></label>
+        <label><span id="startCashLabel">本次新增资金（CNY）</span><input name="initialCash" type="number" min="0" max="1000000000000" step="0.01" value="0" required></label>
+        <label class="simulation-checkbox"><input name="allowNewStocks" type="checkbox">允许买入当前持仓以外的股票</label>
         <button id="startSimulation" class="primary" type="submit" disabled>开始模拟</button>
         <button id="analyzeSimulation" type="button" disabled>AI 分析持仓</button>
       </form>
       <p id="initialHoldings" class="pool-summary" role="status">正在读取当前持仓…</p>
-      <p>初始仓位复制本市场已保存的股票与股数。股票池固定为启动时的持仓股票；暂停后可切换策略，原有持仓和收益记录保留。</p>
+      <p>初始仓位复制本市场已保存的股票与股数。勾选后，每个交易日从本市场研究候选榜补充最多 20 只股票作为策略可选范围；策略有信号且行情有效时才会买入。恢复前可更改此设置并追加资金。</p>
       <details><summary>成交与收益口径</summary><p>每侧手续费 5 bp、滑点 5 bp；买入 A 股按 100 股取整并限制当日买入次日卖出。港股与美股简化为整股交易，未模拟港股每手差异、涨跌停、盘口深度、分红与拆股。</p><p>使用最近完整日线形成信号，在当日交易时段按最新行情模拟一次调仓。报价缺失或超过两分钟时不成交。收益每约 30 秒更新，含剩余现金和模拟持仓市值，扣除成交费用。关闭页面时服务仍会运行；服务断开后自动暂停，重启后可手动恢复，停机期间不补成交。停止会删除该次模拟的仓位、成交和收益记录。</p></details>
     </section>
     <p id="simulationNotice" role="status" aria-live="polite"></p>
@@ -30,9 +31,10 @@
       <div id="simulationEmpty" class="empty-note">选择策略并开始模拟后，这里会持续展示收益和仓位。</div>
       <div id="simulationLedger" hidden>
         <div class="simulation-heading"><div><h3 id="simulationName"></h3><p id="simulationMeta" class="insight-meta"></p></div><div class="simulation-actions"><button id="pauseSimulation" type="button">暂停</button><button id="resumeSimulation" type="button" hidden>恢复</button><button id="stopSimulation" type="button">停止并删除记录</button></div></div>
+        <div id="simulationResumeEditor" class="simulation-resume-editor" hidden><label><span id="resumeCashLabel">本次新增资金</span><input id="resumeAddedCash" type="number" min="0" max="1000000000000" step="0.01" value="0" required></label><label class="simulation-checkbox"><input id="resumeAllowNewStocks" type="checkbox">允许买入当前持仓以外的股票</label><span>新增资金计入投入本金，不计入模拟收益。</span></div>
         <div id="simulationStrategyEditor" class="simulation-strategy-editor" hidden><label for="switchStrategy">切换日线策略（暂停时可用）</label><select id="switchStrategy" disabled><option value="">正在读取策略…</option></select><button id="saveSimulationStrategy" type="button" disabled>切换策略</button><span>保留持仓与累计收益；已调仓的交易日不会重复调仓。</span></div>
         <p id="simulationState" role="status"></p><div id="simulationMetrics" class="simulation-metrics"></div>
-        <p id="simulationStrategyHistory" class="insight-meta"></p>
+        <p id="simulationStrategyHistory" class="insight-meta"></p><p id="simulationCapitalHistory" class="insight-meta"></p><p id="simulationCandidatePool" class="insight-meta"></p>
         <figure class="simulation-chart"><figcaption>累计收益率</figcaption><div id="simulationCurve"></div></figure>
         <h3>当前模拟持仓</h3><div class="table-wrap"><table><thead><tr><th scope="col">股票</th><th scope="col">初始股数</th><th scope="col">模拟股数</th><th scope="col">价格</th><th scope="col">市值</th><th scope="col">账户占比</th><th scope="col">行情时间</th></tr></thead><tbody id="simulationPositions"></tbody></table></div>
         <h3>模拟成交</h3><p class="insight-meta">展示最近 200 笔；全部成交保存于本地账本。</p><div class="table-wrap"><table><thead><tr><th scope="col">成交时间</th><th scope="col">股票</th><th scope="col">方向</th><th scope="col">股数</th><th scope="col">成交价</th><th scope="col">手续费</th><th scope="col">信号日期</th></tr></thead><tbody id="simulationTrades"></tbody></table></div>

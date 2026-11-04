@@ -152,6 +152,28 @@ test('simulation page and API copy the saved market positions into a separate pe
   assert.equal((await fetch(base+`/api/simulations/${modelRow.id}/pause`,{method:'POST'})).status,200);
   assert.equal((await fetch(base+'/api/bar-models/a/daily/active-model',{method:'DELETE'})).status,409);
 });
+test('simulation API accepts new-stock opt-in and cash contribution on resume', async t => {
+  const snapshots=[];
+  const {base,root}=await fixture(t,undefined,{dataHandler:async(req,res)=>{
+    if(req.url==='/v1/portfolio') {res.end(JSON.stringify({holdings:[{market:'a',symbol:'600001',shares:100}]}));return true;}
+    if(req.url==='/v1/candidate-ranking?limit=20&market=a') {res.end(JSON.stringify({ranking:[{symbol:'600002',name:'候选股'}]}));return true;}
+    if(req.url==='/v1/paper-snapshot') {let data='';for await(const chunk of req)data+=chunk;const input=JSON.parse(data);snapshots.push(input);res.end(JSON.stringify({day:'2026-11-04',marketOpen:false,strategyName:'动量',quotes:input.symbols.map(symbol=>({symbol,price:10,as_of:new Date().toISOString()}))}));return true;}
+    return false;
+  }});
+  const startedResponse=await fetch(base+'/api/simulations',{method:'POST',body:JSON.stringify({market:'a',strategy:'momentum',allowNewStocks:true})});
+  assert.equal(startedResponse.status,201);
+  const started=await startedResponse.json();
+  assert.equal(started.allowNewStocks,true);assert.deepEqual(snapshots[0].symbols,['600001','600002']);
+  assert.equal(started.initialEquity,1000);
+  await fetch(base+`/api/simulations/${started.id}/pause`,{method:'POST'});
+  assert.equal((await fetch(base+`/api/simulations/${started.id}/resume`,{method:'POST',body:JSON.stringify({addedCash:-1})})).status,400);
+  const resumedResponse=await fetch(base+`/api/simulations/${started.id}/resume`,{method:'POST',body:JSON.stringify({addedCash:100000,allowNewStocks:false})});
+  assert.equal(resumedResponse.status,200);
+  const resumed=await resumedResponse.json();assert.equal(resumed.cash,100000);
+  assert.equal(resumed.equity,101000);assert.equal(resumed.profit,0);assert.equal(resumed.addedCapital,100000);
+  assert.equal(resumed.allowNewStocks,false);assert.equal(resumed.capitalEvents.length,1);
+  assert.equal(JSON.parse(await readFile(join(root,'data/web/paper-trading.json'),'utf8'))[0].addedCapital,100000);
+});
 test('AI simulation analyzes each saved holding with Codex, marks a supported strategy, and saves its rationale with the ledger', async t => {
   let saved=[{market:'a',symbol:'600001',name:'甲',shares:100},{market:'a',symbol:'600002',name:'乙',shares:200}], called=0;
   const research=async (prompt, options) => {
